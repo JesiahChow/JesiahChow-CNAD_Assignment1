@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Better Call Volt - Dashboard</title>
+    <style>
+        /* Global Styles */
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            color: #333;
+        }
+
+        header {
+            background-color: #005B7F; /* Professional blue color */
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        nav a {
+            color: white;
+            margin: 0 15px;
+            text-decoration: none;
+            font-size: 16px;
+        }
+
+        nav a:hover {
+            text-decoration: underline;
+            font-weight: bold;
+        }
+
+        /* Welcome Section */
+        .welcome {
+            background-color: #4a90e2; /* Lighter professional blue */
+            color: white;
+            text-align: center;
+            padding: 80px 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .welcome h2 {
+            margin: 0;
+            font-size: 36px;
+        }
+
+        .welcome p {
+            margin: 15px 0;
+            font-size: 18px;
+        }
+
+        /* Dashboard Layout */
+        .dashboard {
+            padding: 40px 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .dashboard h3 {
+            color: #333;
+            font-size: 24px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        /* Section Styles */
+        .section {
+            background: white;
+            padding: 25px;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .section h4 {
+            margin: 0 0 15px;
+            font-size: 20px;
+            color: #005B7F; /* Blue color for headings */
+            font-weight: bold;
+        }
+
+        .section p {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        /* Button Styles */
+        .btn {
+            display: inline-block;
+            background-color: #0074cc; /* Professional button color */
+            color: white;
+            padding: 12px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .btn:hover {
+            background-color: #005B7F; /* Darken button color on hover */
+        }
+
+        /* Footer Styling */
+        footer {
+            text-align: center;
+            padding: 20px;
+            background-color: #f1f1f1; /* Subtle gray background */
+            font-size: 14px;
+            color: #555;
+            margin-top: 50px;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <h1>Better Call Volt - Dashboard</h1>
+        <nav>
+            <a href="/">Home</a>
+            <a href="/vehicles">Vehicles</a>
+            <a href="/reservations">Reservations</a>
+            <a href="/logout">Logout</a>
+            <a href="/profile">Profile</a>
+        </nav>
+    </header>
+
+    <!-- Welcome Section -->
+    <div class="welcome">
+        <h2>Welcome, {{.Username}}!</h2>
+        <p>Your membership tier: <strong>{{.MembershipTier}}</strong></p>
+    </div>
+
+    <!-- Dashboard Content -->
+    <div class="dashboard">
+        <h3>Dashboard</h3>
+
+        <div class="section">
+            <h4>Your Recent Reservations</h4>
+            <p>No reservations found. <a href="/reservations" class="btn">View Reservations</a></p>
+        </div>
+
+        <div class="section">
+            <h4>Available Vehicles</h4>
+            <p>Explore our fleet of vehicles and find the perfect one for your next trip.</p>
+            <a href="/vehicles" class="btn">View Vehicles</a>
+        </div>
+
+        <div class="section">
+            <h4>Upgrade Your Membership</h4>
+            <p>Want more benefits? Upgrade to our premium tier today!</p>
+            <a href="/membership" class="btn">Upgrade Now</a>
+        </div>
+
+        <div class="section">
+            <h4>Update Your Profile</h4>
+            <p>Keep your account information up-to-date.</p>
+            <a href="/profile" class="btn">Update Profile</a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        &copy; 2024 Better Call Volt. All rights reserved.
+    </footer>
+</body>
+</html>

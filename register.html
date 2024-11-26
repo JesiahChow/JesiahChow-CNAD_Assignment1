@@ -29,6 +29,12 @@
             margin-bottom: 20px;
         }
 
+        .error {
+            color: red;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
         form {
             display: flex;
             flex-direction: column;
@@ -66,6 +72,12 @@
 <body>
     <div class="container">
         <h1>Register</h1>
+
+        <!-- Display error message if there is one -->
+        {{if .ErrorMessage}}
+        <div class="error">{{.ErrorMessage}}</div>
+        {{end}}
+
         <form action="/register" method="post">
             <input type="text" name="username" placeholder="Username" required>
             <input type="email" name="email" placeholder="Email" required>

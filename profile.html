@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profile - Better Call Volt</title>
+    <style>
+        /* Global Styles */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9; /* Light background color for professionalism */
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Header Styling */
+        header {
+            background-color: #004494; /* Professional blue */
+            color: white;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        nav a {
+            color: white;
+            margin: 0 10px;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        nav a:hover {
+            text-decoration: underline;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .container h2 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #004494; /* Consistent with the header color */
+        }
+
+        /* Form Styling */
+        label {
+            display: block;
+            margin: 10px 0 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s ease;
+        }
+
+        input:focus {
+            border-color: #004494; /* Blue focus border */
+            outline: none;
+        }
+
+        button {
+            background-color: #004494; /* Professional blue */
+            color: white;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            width: 100%;
+            transition: background-color 0.3s ease;
+            text-align: center; /* Center text */
+            line-height: 1.5; /* Center text vertically */
+        }
+
+        button:hover {
+            background-color: #003377; /* Darker blue on hover */
+        }
+
+        /* Button Styling */
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px; /* Adds space between buttons */
+            margin-top: 20px; /* Adds space above the container */
+        }
+
+        /* Back Button Styling */
+        .back-btn {
+            background-color: #004494; /* Red back button */
+            color: white;
+            padding: 14px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            text-align: center; /* Center text */
+            line-height: 1.5; /* Center text vertically */
+        }
+
+        .back-btn:hover {
+            background-color: #003377; /* Darker red on hover */
+        }
+
+        /* Error Message Styling */
+        .error {
+            color: #d12f1b; /* Red for errors */
+            font-size: 14px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        /* Footer Styling */
+        footer {
+            text-align: center;
+            padding: 20px;
+            background-color: #004494; /* Matching footer color */
+            color: white;
+            font-size: 14px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header with Navigation -->
+    <header>
+        <h1>Better Call Volt - Profile</h1>
+        <nav>
+            <a href="/">Home</a>
+            <a href="/vehicles">Vehicles</a>
+            <a href="/reservations">Reservations</a>
+            <a href="/logout">Logout</a>
+        </nav>
+    </header>
+
+    <!-- Profile Form Container -->
+    <div class="container">
+        <h2>Edit Your Profile</h2>
+
+        <!-- Error Message if there's any -->
+        {{if .ErrorMessage}}
+        <div class="error">{{.ErrorMessage}}</div>
+        {{end}}
+
+        <!-- Profile Update Form -->
+        <form method="POST" action="/profile">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" value="{{.Username}}" required>
+
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" value="{{.Email}}" required>
+
+            <label for="password">New Password (optional)</label>
+            <input type="password" id="password" name="password" placeholder="Enter new password (optional)">
+
+            <label for="membership-tier">Membership Tier</label>
+            <input type="text" id="membership-tier" name="membership-tier" value="{{.MembershipTier}}" disabled>
+
+            <button type="submit">Save Changes</button>
+        </form>
+
+        <!-- Button Container -->
+        <div class="button-container">
+            <!-- Back to Dashboard Button -->
+            <a href="/home" class="back-btn">Back to Dashboard</a>
+        </div>
+    </div>
+
+    <!-- Footer Section -->
+    <footer>
+        &copy; 2024 Better Call Volt. All rights reserved.
+    </footer>
+
+</body>
+</html>
