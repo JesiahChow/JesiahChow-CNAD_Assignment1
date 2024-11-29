@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Membership - Better Call Volt</title>
+    <style>
+        /* Styles for the page */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background-color: #f4f4f9;
+            padding: 0;
+            color: #333;
+        }
+
+        header {
+            background-color: #004494;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .membership-card {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .membership-card h2 {
+            margin-top: 0;
+            color: #004494;
+        }
+
+        .membership-card p {
+            color: #555;
+        }
+
+        .price {
+            font-size: 20px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        button {
+            background-color: #004494;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background-color: #003377;
+        }
+
+        button:disabled {
+            background-color: #bbb;
+            cursor: not-allowed;
+        }
+
+        .back-btn {
+            display: inline-block;
+            background-color: #004494; 
+            color: white;
+            padding: 12px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background-color 0.3s ease;
+        }
+
+        .back-btn:hover {
+            background-color: #003377; 
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Welcome to Membership</h1>
+    </header>
+    <div class="container">
+        <h2>Hello, {{.Username}}</h2>
+        <p>Choose a membership plan to enjoy exclusive vehicle rental discounts:</p>
+
+        {{range .Tiers}}
+        <div class="membership-card">
+            <h2>{{.Name}}</h2>
+            <p>{{.Benefits}}</p>
+            <p class="price">
+                Discount on vehicle rentals: 
+                {{if lt .DiscountRate 0.01}}None{{else}}{{.DiscountRate}}% Off{{end}}
+            </p>
+
+            <!-- Show upgrade cost if it's a higher tier -->
+            {{if .IsCurrent}}
+                <button disabled>Current Plan</button>
+            {{else}}
+                <p class="price">
+                    Upgrade cost: ${{printf "%.2f" .Price}}
+                </p>
+                <form method="POST" action="/upgrade">
+                    <input type="hidden" name="membership_tier_id" value="{{.ID}}">
+                    <button type="submit">Upgrade to {{.Name}}</button>
+                </form>
+            {{end}}
+        </div>
+        {{end}}
+
+        <!-- Back Button -->
+        <a href="/home" class="back-btn">Back to Dashboard</a>
+    </div>
+</body>
+</html>

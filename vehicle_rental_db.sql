@@ -55,3 +55,7 @@ MODIFY COLUMN membership_tier_id INT DEFAULT 1;
 ALTER TABLE users
 ADD COLUMN verification_token VARCHAR(255),
 ADD COLUMN is_verified BOOLEAN DEFAULT FALSE;
+
+--price is cost needed to upgrade membership tier
+ALTER TABLE membership_tiers
+ADD COLUMN price DECIMAL(10, 2) DEFAULT 0;

@@ -254,10 +254,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
-		//set session
+		//save user details in session
 		session, _ := store.Get(r, "user-session")
 		session.Values["username"] = username
 		session.Values["loggedIn"] = true
+		session.Values["membershipTier"] = membershipTierID
 		session.Save(r, w)
 
 		// Login successful
@@ -396,6 +397,77 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+// MembershipTier represents a membership tier
+type MembershipTier struct {
+	ID           int
+	Name         string
+	Benefits     string
+	DiscountRate float64
+	Price        float64
+	IsCurrent    bool
+}
+
+// User represents the logged-in user
+type User struct {
+	ID             int
+	Username       string
+	MembershipTier int
+}
+
+// membershipHandler renders the membership page
+func membershipHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "user-session")
+	//check if user is logged in
+	loggedIn, _ := session.Values["loggedIn"].(bool)
+	username, _ := session.Values["username"].(string)
+	//check if user is logged in
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	// Retrieve the session
+	membershipTier, _ := session.Values["membershipTier"].(int)
+
+	//fetch all membership tiers from database
+	rows, err := db.Query("select id, name, benefits, discount_rate,price from membership_tiers")
+	if err != nil {
+		http.Error(w, "Error loading membership tiers", http.StatusInternalServerError)
+		log.Printf("Database error: %v\n", err)
+		return
+	}
+	defer rows.Close()
+	var tiers []MembershipTier
+	for rows.Next() {
+		var tier MembershipTier
+		err := rows.Scan(&tier.ID, &tier.Name, &tier.Benefits, &tier.DiscountRate, &tier.Price)
+		if err != nil {
+			http.Error(w, "Error reading membership tiers", http.StatusInternalServerError)
+			log.Printf("Database error: %v\n", err)
+			return
+		}
+		// Mark the user's current membership
+		tier.IsCurrent = (tier.ID == membershipTier)
+		tiers = append(tiers, tier)
+	}
+	//parse and render the html page for membership page
+	tmpl, err := template.ParseFiles("membership.html")
+	if err != nil {
+		http.Error(w, "Error loading page", http.StatusInternalServerError)
+		log.Printf("Template error: %v\n", err)
+		return
+	}
+
+	err = tmpl.Execute(w, struct {
+		Username string
+		Tiers    []MembershipTier
+	}{Username: username,
+		Tiers: tiers})
+	if err != nil {
+		http.Error(w, "Error rendering page", http.StatusInternalServerError)
+		log.Printf("Template rendering error: %v\n", err)
+	}
+}
+
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "user-session")
 	session.Values["loggedIn"] = false
@@ -411,6 +483,7 @@ func main() {
 	http.HandleFunc("/login", loginHandler)
 	http.HandleFunc("/home", homeHandler)
 	http.HandleFunc("/profile", profileHandler)
+	http.HandleFunc("/membership", membershipHandler)
 	// Register the verify handler to handle the email verification
 	http.HandleFunc("/verify", verifyHandler) // Email verification handler
 	// Register the logout handler to handle user logout
