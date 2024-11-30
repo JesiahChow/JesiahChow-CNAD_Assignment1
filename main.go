@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,23 +17,61 @@ import (
 	"github.com/gorilla/sessions"
 )
 
-var db *sql.DB
-
 // store cookie
 var store = sessions.NewCookieStore([]byte("your-secret-key"))
 
-// connect to database
+var userdb *sql.DB
+var vehicledb *sql.DB
+var reservationdb *sql.DB
+var billingdb *sql.DB
+
+// Initialize separate connections for each service
 func init() {
 	var err error
-	dsn := "root:password123@tcp(127.0.0.1:3306)/vehicle_rental_db" //MySQL credentials
-	db, err = sql.Open("mysql", dsn)
+
+	// User Service DB
+	dsnUser := "root:password123@tcp(127.0.0.1:3306)/user_service_db"
+	userdb, err = sql.Open("mysql", dsnUser)
 	if err != nil {
-		log.Fatalf("Error connecting to the database: %v", err)
+		log.Fatalf("Error connecting to the User Service database: %v", err)
 	}
-	if err := db.Ping(); err != nil {
-		log.Fatalf("Error verifying database: %v", err)
+	if err := userdb.Ping(); err != nil {
+		log.Fatalf("Error verifying User Service database: %v", err)
 	}
-	fmt.Println("Database connected successfully!")
+	fmt.Println("User Service database connected successfully!")
+
+	// Vehicle Service DB
+	dsnVehicle := "root:password123@tcp(127.0.0.1:3306)/vehicle_service_db"
+	vehicledb, err = sql.Open("mysql", dsnVehicle)
+	if err != nil {
+		log.Fatalf("Error connecting to the Vehicle Service database: %v", err)
+	}
+	if err := vehicledb.Ping(); err != nil {
+		log.Fatalf("Error verifying Vehicle Service database: %v", err)
+	}
+	fmt.Println("Vehicle Service database connected successfully!")
+
+	// Reservation Service DB
+	dsnReservation := "root:password123@tcp(127.0.0.1:3306)/reservation_service_db"
+	reservationdb, err = sql.Open("mysql", dsnReservation)
+	if err != nil {
+		log.Fatalf("Error connecting to the Reservation Service database: %v", err)
+	}
+	if err := reservationdb.Ping(); err != nil {
+		log.Fatalf("Error verifying Reservation Service database: %v", err)
+	}
+	fmt.Println("Reservation Service database connected successfully!")
+
+	// Billing Service DB
+	dsnBilling := "root:password123@tcp(127.0.0.1:3306)/billing_service_db"
+	billingdb, err = sql.Open("mysql", dsnBilling)
+	if err != nil {
+		log.Fatalf("Error connecting to the Billing Service database: %v", err)
+	}
+	if err := billingdb.Ping(); err != nil {
+		log.Fatalf("Error verifying Billing Service database: %v", err)
+	}
+	fmt.Println("Billing Service database connected successfully!")
 }
 
 // Hash password
@@ -91,14 +130,14 @@ func verifyHandler(w http.ResponseWriter, r *http.Request) {
 	var userID int
 
 	// Check if the token matches any user
-	err := db.QueryRow("SELECT id FROM users WHERE verification_token = ?", token).Scan(&userID)
+	err := userdb.QueryRow("SELECT id FROM users WHERE verification_token = ?", token).Scan(&userID)
 	if err != nil {
 		http.Error(w, "Invalid or expired token", http.StatusBadRequest)
 		return
 	}
 
 	// Mark the user as verified
-	_, err = db.Exec("UPDATE users SET is_verified = TRUE WHERE id = ?", userID)
+	_, err = userdb.Exec("UPDATE users SET is_verified = TRUE WHERE id = ?", userID)
 	if err != nil {
 		http.Error(w, "Error verifying user", http.StatusInternalServerError)
 		return
@@ -139,7 +178,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Check if the username already exists in the database
 		var existingUsername string
-		err := db.QueryRow("SELECT username FROM users WHERE username = ?", username).Scan(&existingUsername)
+		err := userdb.QueryRow("SELECT username FROM users WHERE username = ?", username).Scan(&existingUsername)
 		if err != sql.ErrNoRows {
 			// If the username exists, send an error message
 			tmpl, err := template.ParseFiles("register.html")
@@ -157,7 +196,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Check if the email already exists in the database
 		var existingEmail string
-		err = db.QueryRow("SELECT email FROM users WHERE email = ?", email).Scan(&existingEmail)
+		err = userdb.QueryRow("SELECT email FROM users WHERE email = ?", email).Scan(&existingEmail)
 		if err != sql.ErrNoRows {
 			// If the email exists, send an error message
 			tmpl, err := template.ParseFiles("register.html")
@@ -177,7 +216,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		verificationToken := generateVerificationToken()
 
 		// Insert into the database
-		_, err = db.Exec("INSERT INTO users (username, email, password_hash, verification_token) VALUES (?, ?, ?, ?)",
+		_, err = userdb.Exec("INSERT INTO users (username, email, password_hash, verification_token) VALUES (?, ?, ?, ?)",
 			username, email, passwordHash, verificationToken)
 		if err != nil {
 			http.Error(w, "Failed to register user. Please try again.", http.StatusInternalServerError)
@@ -221,7 +260,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		var storedPasswordHash string
 		var isVerified bool
 
-		err := db.QueryRow("SELECT username, membership_tier_id, password_hash, is_verified FROM users WHERE email = ?", email).
+		err := userdb.QueryRow("SELECT username, membership_tier_id, password_hash, is_verified FROM users WHERE email = ?", email).
 			Scan(&username, &membershipTierID, &storedPasswordHash, &isVerified)
 
 		if err == sql.ErrNoRows || passwordHash != storedPasswordHash {
@@ -278,9 +317,9 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-
+	//retrieve user's memmbersip tier
 	var membershipTier string
-	err := db.QueryRow("SELECT membership_tiers.name FROM users INNER JOIN membership_tiers ON users.membership_tier_id = membership_tiers.id WHERE users.username = ?", username).Scan(&membershipTier)
+	err := userdb.QueryRow("SELECT membership_tiers.name FROM users INNER JOIN membership_tiers ON users.membership_tier_id = membership_tiers.id WHERE users.username = ?", username).Scan(&membershipTier)
 	if err != nil {
 		log.Printf("Error retrieving membership tier: %v\n", err)
 		http.Error(w, "Internal server error.", http.StatusInternalServerError)
@@ -303,8 +342,16 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		Username:       username,
 		MembershipTier: membershipTier,
 	})
+	response := struct {
+		Message string `json:"message"`
+	}{"Login successful"}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+
 }
 
+// profile page
 func profileHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "user-session")
 	loggedIn, _ := session.Values["loggedIn"].(bool)
@@ -318,7 +365,7 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		//fetch user details
 		var email, membershipTier string
-		err := db.QueryRow("select email, (select name from membership_tiers where id = membership_tier_id) as membership_tier from users where username = ?", username).Scan(&email, &membershipTier)
+		err := userdb.QueryRow("select email, (select name from membership_tiers where id = membership_tier_id) as membership_tier from users where username = ?", username).Scan(&email, &membershipTier)
 		if err != nil {
 			log.Printf("Error fetching user details: %v", err)
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
@@ -351,7 +398,7 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 		//check if new username is taken
 		if newUsername != username {
 			var existingId int
-			err := db.QueryRow("select id from users where username = ?", newUsername).Scan(&existingId)
+			err := userdb.QueryRow("select id from users where username = ?", newUsername).Scan(&existingId)
 			if err == nil {
 				tmpl, _ := template.ParseFiles("profile.html")
 				tmpl.Execute(w, struct {
@@ -382,7 +429,7 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 		query += " WHERE username = ?"
 		args = append(args, username)
 
-		_, err := db.Exec(query, args...)
+		_, err := userdb.Exec(query, args...)
 		if err != nil {
 			log.Printf("Error updating user profile: %v", err)
 			http.Error(w, "Failed to update profile. Please try again.", http.StatusInternalServerError)
@@ -407,17 +454,9 @@ type MembershipTier struct {
 	IsCurrent    bool
 }
 
-// User represents the logged-in user
-type User struct {
-	ID             int
-	Username       string
-	MembershipTier int
-}
-
 // membershipHandler renders the membership page
 func membershipHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "user-session")
-	//check if user is logged in
 	loggedIn, _ := session.Values["loggedIn"].(bool)
 	username, _ := session.Values["username"].(string)
 	//check if user is logged in
@@ -429,7 +468,7 @@ func membershipHandler(w http.ResponseWriter, r *http.Request) {
 	membershipTier, _ := session.Values["membershipTier"].(int)
 
 	//fetch all membership tiers from database
-	rows, err := db.Query("select id, name, benefits, discount_rate,price from membership_tiers")
+	rows, err := userdb.Query("select id, name, benefits, discount_rate,price from membership_tiers")
 	if err != nil {
 		http.Error(w, "Error loading membership tiers", http.StatusInternalServerError)
 		log.Printf("Database error: %v\n", err)
@@ -438,6 +477,7 @@ func membershipHandler(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 	var tiers []MembershipTier
 	for rows.Next() {
+		// retrieve membership tier information and store under a struct
 		var tier MembershipTier
 		err := rows.Scan(&tier.ID, &tier.Name, &tier.Benefits, &tier.DiscountRate, &tier.Price)
 		if err != nil {
