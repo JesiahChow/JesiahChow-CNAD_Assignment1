@@ -14,6 +14,8 @@ import (
 	"text/template"
 
 	_ "github.com/go-sql-driver/mysql"
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 )
 
@@ -256,12 +258,12 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 
 		// Retrieve user info from database
 		var username string
-		var membershipTierID int
+		var membershipTierID, userId int
 		var storedPasswordHash string
 		var isVerified bool
 
-		err := userdb.QueryRow("SELECT username, membership_tier_id, password_hash, is_verified FROM users WHERE email = ?", email).
-			Scan(&username, &membershipTierID, &storedPasswordHash, &isVerified)
+		err := userdb.QueryRow("SELECT id, username, membership_tier_id, password_hash, is_verified FROM users WHERE email = ?", email).
+			Scan(&userId, &username, &membershipTierID, &storedPasswordHash, &isVerified)
 
 		if err == sql.ErrNoRows || passwordHash != storedPasswordHash {
 			// If user does not exist or password does not match
@@ -298,10 +300,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 		session.Values["username"] = username
 		session.Values["loggedIn"] = true
 		session.Values["membershipTier"] = membershipTierID
+		session.Values["UserID"] = userId
 		session.Save(r, w)
 
 		// Login successful
-		log.Printf("User logged in: %s with Membership Tier ID: %d\n", username, membershipTierID)
+		log.Printf("User logged in: %s with Membership Tier ID: %d and user id: %d \n", username, membershipTierID, userId)
 		http.Redirect(w, r, "/home", http.StatusSeeOther) // Redirect to homepage or dashboard
 	}
 }
@@ -515,19 +518,217 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
+// struct to represent vehicle
+type Vehicle struct {
+	ID           int     `json:"id"`
+	LicensePlate string  `json:"license_plate"`
+	Model        string  `json:"model"`
+	Location     string  `json:"location"`
+	HourlyRate   float64 `json:"hourly_rate"`
+}
+
+// view available vehicles in real-time
+func availableVehiclesHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+	//query for available vehicles
+	rows, err := vehicledb.Query("select id, license_plate, model, location, hourly_rate from vehicles where status = 'available'")
+	if err != nil {
+		http.Error(w, "Failed to retrieve available vehicles", http.StatusInternalServerError)
+		log.Printf("Database query error: %v\n", err)
+		return
+	}
+	defer rows.Close()
+
+	var vehicles []Vehicle
+	//store vehicle data as a struct
+	for rows.Next() {
+		var vehicle Vehicle
+		err := rows.Scan(&vehicle.ID, &vehicle.LicensePlate, &vehicle.Model, &vehicle.Location, &vehicle.HourlyRate)
+		if err != nil {
+			http.Error(w, "Error reading vehicle data", http.StatusInternalServerError)
+			log.Printf("Row scan error: %v\n", err)
+			return
+		}
+		vehicles = append(vehicles, vehicle)
+	}
+	//respond with available vehicles in JSON format
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(vehicles)
+	if err != nil {
+		http.Error(w, "Error encoding JSON response", http.StatusInternalServerError)
+		log.Printf("JSON encoding error: %v\n", err)
+	}
+
+}
+
+// reservation service: get available vehicles (Get/reservations/vehicle)
+func availableReservationsHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+	//call vehicle service to get available vehicles
+	resp, err := http.Get("http://localhost:8081/vehicles/available")
+	if err != nil {
+		http.Error(w, "Error contacting Vehicle Service", http.StatusInternalServerError)
+		log.Printf("Error contacting Vehicle Service: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var vehicles []Vehicle
+	err = json.NewDecoder(resp.Body).Decode(&vehicles)
+	if err != nil {
+		http.Error(w, "Error decoding Vehicle Service response", http.StatusInternalServerError)
+		log.Printf("Error decoding response: %v\n", err)
+		return
+	}
+	// Respond with the available vehicles in JSON format
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(vehicles)
+	if err != nil {
+		http.Error(w, "Error encoding JSON response", http.StatusInternalServerError)
+		log.Printf("Error encoding response: %v\n", err)
+	}
+}
+
+// Reservation Service: Create Reservation and Reserve Vehicle (POST /reservations)
+func createReservationHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+	var reservation struct {
+		UserID     int     `json:"user_id"`
+		VehicleID  int     `json:"vehicle_id"`
+		StartTime  string  `json:"start_time"`
+		EndTime    string  `json:"end_time"`
+		TotalPrice float64 `json:"total_price"`
+	}
+	// Decode the reservation details from the request body
+	err := json.NewDecoder(r.Body).Decode(&reservation)
+	if err != nil {
+		http.Error(w, "Error decoding reservation data", http.StatusInternalServerError)
+		log.Printf("Error decoding request body: %v\n", err)
+		return
+	}
+	// Create reservation in the Reservation Service database
+	_, err = reservationdb.Exec("INSERT INTO reservations (user_id, vehicle_id, start_time, end_time, total_price) VALUES (?, ?, ?, ?, ?)",
+		reservation.UserID, reservation.VehicleID, reservation.StartTime, reservation.EndTime, reservation.TotalPrice)
+	if err != nil {
+		http.Error(w, "Error creating reservation", http.StatusInternalServerError)
+		log.Printf("Received reservation data: %+v\n", reservation)
+
+		log.Printf("Error inserting reservation into database: %v\n", err)
+		return
+	}
+	// Update reservation status to 'active'
+	_, err = reservationdb.Exec("UPDATE reservations SET status = 'active' WHERE vehicle_id = ? AND user_id = ? AND start_time = ?",
+		reservation.VehicleID, reservation.UserID, reservation.StartTime)
+	if err != nil {
+		http.Error(w, "Error updating reservation status", http.StatusInternalServerError)
+		log.Printf("Error updating reservation status: %v\n", err)
+		return
+	}
+
+	// Call Vehicle Service to reserve the vehicle (update its status)
+	vehicleServiceURL := fmt.Sprintf("http://localhost:8081/vehicles/reserve/%d", reservation.VehicleID)
+	resp, err := http.Post(vehicleServiceURL, "application/json", nil)
+	if err != nil {
+		log.Printf("Error calling Vehicle Service: %v\n", err)
+		http.Error(w, "Error reserving vehicle", http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Vehicle Service Response: %v\n", resp.StatusCode) // Add this to log the status code of the response
+	if resp.StatusCode != http.StatusOK {
+		http.Error(w, "Error reserving vehicle", http.StatusInternalServerError)
+		return
+	}
+
+	// Respond with a success message
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Reservation successful, vehicle reserved.",
+	})
+}
+
+// Vehicle Service: Reserve Vehicle (POST /vehicles/reserve/{vehicle_id})
+func reserveVehicleHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("About to handle vehicle reservation")
+	// Extract vehicle ID from the URL path
+	vehicleID := mux.Vars(r)["vehicle_id"]
+	log.Printf("Vehicle ID from URL: %s", vehicleID)
+	// Update the vehicle status in the Vehicle Service database
+	_, err := vehicledb.Exec("UPDATE vehicles SET status = 'reserved' WHERE id = ?", vehicleID)
+	if err != nil {
+		http.Error(w, "Error updating vehicle status", http.StatusInternalServerError)
+		log.Printf("Error updating vehicle status in Vehicle Service: %v\n", err)
+		return
+	}
+	log.Printf("Vehicle ID %d status updated to 'reserved'", vehicleID)
+	// Respond with a success message
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Vehicle successfully reserved.",
+	})
+}
+
+// availableVehiclesPageHandler serves the Available Vehicles page
+func VehiclesPageHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "user-session")
+	loggedIn, _ := session.Values["loggedIn"].(bool)
+	userID, _ := session.Values["UserID"].(int)
+
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// Serve the HTML page for available vehicles
+	tmpl, err := template.ParseFiles("availableVehicles.html")
+	if err != nil {
+		http.Error(w, "Error loading template", http.StatusInternalServerError)
+		log.Printf("Template parsing error: %v", err)
+		return
+	}
+
+	// Pass the user ID to the template
+	tmpl.Execute(w, map[string]interface{}{
+		"UserID": userID,
+	})
+	log.Printf("user id: %d \n", userID)
+}
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	// Create a new router
+	r := mux.NewRouter()
+
+	// Static file serving
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "index.html")
 	})
-	http.HandleFunc("/register", registerHandler)
-	http.HandleFunc("/login", loginHandler)
-	http.HandleFunc("/home", homeHandler)
-	http.HandleFunc("/profile", profileHandler)
-	http.HandleFunc("/membership", membershipHandler)
-	// Register the verify handler to handle the email verification
-	http.HandleFunc("/verify", verifyHandler) // Email verification handler
-	// Register the logout handler to handle user logout
-	http.HandleFunc("/logout", logoutHandler) // Logout handler
+
+	// Register handlers
+	r.HandleFunc("/register", registerHandler)
+	r.HandleFunc("/login", loginHandler)
+	r.HandleFunc("/home", homeHandler)
+	r.HandleFunc("/profile", profileHandler)
+	r.HandleFunc("/membership", membershipHandler)
+	r.HandleFunc("/verify", verifyHandler) // Email verification handler
+	r.HandleFunc("/logout", logoutHandler) // Logout handler
+	// Handle available vehicles API
+	r.HandleFunc("/vehicles", VehiclesPageHandler)
+	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
+	// Handle vehicle reservation with dynamic vehicle_id
+	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST")
+
+	// Start the server
 	log.Println("Server started at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(
+		handlers.AllowedOrigins([]string{"http://localhost:8080"}),         // Allow only frontend's origin
+		handlers.AllowedMethods([]string{"POST", "GET", "PUT", "DELETE"}),  // Allowed HTTP methods
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}), // Allowed headers
+	)(r)))
 }

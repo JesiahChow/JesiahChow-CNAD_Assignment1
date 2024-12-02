@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Available Vehicles</title>
+    <style>
+        /* Global Styles */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            text-align: center;
+        }
+
+        th {
+            background-color: #f4f4f9;
+            color: #333;
+        }
+
+        td {
+            background-color: #ffffff;
+        }
+
+        button {
+            padding: 8px 12px;
+            background-color: #004494;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background-color: #003377;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none; 
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0,0,0);
+            background-color: rgba(0,0,0,0.4);
+            padding-top: 60px;
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        input[type="datetime-local"], input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        input[type="number"] {
+            margin-bottom: 15px;
+        }
+
+        .modal-footer {
+            text-align: right;
+        }
+
+        .modal-footer button {
+            background-color: #28a745;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Available Vehicles</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>License Plate</th>
+                <th>Model</th>
+                <th>Location</th>
+                <th>Hourly Rate</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="vehicles"></tbody>
+    </table>
+
+    <!-- Modal for Reservation -->
+    <div id="reservationModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Reserve Vehicle</h2>
+            <p id="vehicleDetails"></p>
+            <label for="startTime">Start Time:</label>
+            <input type="datetime-local" id="startTime" onchange="calculateTotalPrice()">
+            
+            <label for="endTime">End Time:</label>
+            <input type="datetime-local" id="endTime" onchange="calculateTotalPrice()">
+
+            <label for="totalPrice">Total Price (Hourly Rate * Hours):</label>
+            <input type="number" id="totalPrice" readonly>
+
+            <div class="modal-footer">
+                <button onclick="submitReservation()">Reserve</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+       let selectedVehicleID = null;  // Stores the vehicle ID for the reservation
+let hourlyRate = 0;  // Stores the hourly rate for the selected vehicle
+
+// Fetch available vehicles and populate the table
+fetch('/vehicles/available')
+    .then(response => response.json())
+    .then(data => {
+        const tableBody = document.getElementById('vehicles');
+        data.forEach(vehicle => {
+            tableBody.innerHTML += `
+                <tr>
+                    <td>${vehicle.license_plate}</td>
+                    <td>${vehicle.model}</td>
+                    <td>${vehicle.location}</td>
+                    <td>${vehicle.hourly_rate}</td>
+                    <td><button onclick="openReservationModal(${vehicle.id}, ${vehicle.hourly_rate}, '${vehicle.license_plate}')">Reserve</button></td>
+                </tr>
+            `;
+        });
+    })
+    .catch(err => console.error('Error fetching vehicles:', err));
+
+// Opens the reservation modal and sets vehicle information
+function openReservationModal(vehicleID, rate, licensePlate) {
+    selectedVehicleID = vehicleID;
+    hourlyRate = rate;
+
+    // Display vehicle details in the modal
+    document.getElementById('vehicleDetails').innerText = `License Plate: ${licensePlate} | Hourly Rate: $${rate.toFixed(2)}`;
+    document.getElementById('startTime').value = '';  // Clear previous inputs
+    document.getElementById('endTime').value = '';
+    document.getElementById('totalPrice').value = '';
+
+    // Display the modal
+    document.getElementById('reservationModal').style.display = "block";
+}
+
+// Closes the reservation modal
+document.querySelector('.close').onclick = function() {
+    document.getElementById('reservationModal').style.display = "none";
+};
+
+// Calculates the total price based on start and end times
+function calculateTotalPrice() {
+    const startTime = document.getElementById('startTime').value;
+    const endTime = document.getElementById('endTime').value;
+
+    if (!startTime || !endTime) {
+        document.getElementById('totalPrice').value = '';
+        return;
+    }
+
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+
+    // Validate time input
+    if (isNaN(start) || isNaN(end) || end <= start) {
+        alert("Please ensure the end time is later than the start time.");
+        document.getElementById('totalPrice').value = '';
+        return;
+    }
+
+    // Calculate the total hours, including fractions
+    const hours = (end - start) / (1000 * 60 * 60);  // Convert milliseconds to hours
+    const totalPrice = hourlyRate * hours;
+
+    document.getElementById('totalPrice').value = totalPrice.toFixed(2);  // Display rounded value
+}
+
+// Submits the reservation
+function submitReservation() {
+    const startTime = document.getElementById('startTime').value;
+    const endTime = document.getElementById('endTime').value;
+    const totalPrice = parseFloat(document.getElementById('totalPrice').value);
+
+    if (!startTime || !endTime || isNaN(totalPrice) || totalPrice <= 0) {
+        alert("Please complete all fields with valid data.");
+        return;
+    }
+
+    const reservationDetails = {
+        vehicle_id: selectedVehicleID,
+        user_id: parseInt("{{.UserID}}"),  // This will be dynamically injected by Go
+        start_time: startTime,
+        end_time: endTime,
+        total_price: totalPrice
+    };
+
+    fetch('http://localhost:8080/vehicles/reserve/' + selectedVehicleID, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(reservationDetails)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.message) {
+            alert(data.message || "Reservation successful!");
+            window.location.href = "/reservations"; // Redirect to the reservation page
+        }
+    })
+    .catch(err => {
+        console.error("Error during reservation:", err);
+        alert("Error during reservation: " + err.message);
+    });
+}
+
+    </script>
+</body>
+</html>
