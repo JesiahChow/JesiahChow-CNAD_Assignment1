@@ -635,7 +635,7 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call Vehicle Service to reserve the vehicle (update its status)
-	vehicleServiceURL := fmt.Sprintf("http://localhost:8081/vehicles/reserve/%d", reservation.VehicleID)
+	vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/reserve/%d", reservation.VehicleID)
 	resp, err := http.Post(vehicleServiceURL, "application/json", nil)
 	if err != nil {
 		log.Printf("Error calling Vehicle Service: %v\n", err)
@@ -721,10 +721,10 @@ func main() {
 	// Handle available vehicles API
 	r.HandleFunc("/vehicles", VehiclesPageHandler)
 	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
-	// Handle vehicle reservation with dynamic vehicle_id
+	r.HandleFunc("/reservations", createReservationHandler)
 	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST")
 
-	// Start the server
+	// Apply CORS middleware
 	log.Println("Server started at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(
 		handlers.AllowedOrigins([]string{"http://localhost:8080"}),         // Allow only frontend's origin

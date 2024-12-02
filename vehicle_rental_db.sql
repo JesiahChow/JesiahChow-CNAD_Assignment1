@@ -106,7 +106,24 @@ INSERT INTO billing_service_db.billing (reservation_id, payment_status, amount) 
 (5, 'paid', 68.00);
 
 
+CREATE DATABASE promotion_service_db;
 
+USE promotion_service_db;
+-- Promotions Table
+CREATE TABLE promotions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    code VARCHAR(20) UNIQUE,            -- Unique code for promotional discount (optional, e.g. PROMO10)
+    description VARCHAR(255),            -- Description of the promotion
+    discount_rate DECIMAL(5, 2),        -- Discount percentage (e.g., 10 for 10%)
+    start_date DATETIME,                -- When the promotion starts
+    end_date DATETIME,                  -- When the promotion ends
+    is_active BOOLEAN DEFAULT TRUE,     -- Is the promotion currently active?
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO promotions (code, description, discount_rate, start_date, end_date, is_active)
+VALUES 
+('PROMO10', '10% off for all users', 10.00, '2024-12-01', '2024-12-31', TRUE),
+('HOLIDAY20', '20% off for holidays', 20.00, '2024-12-20', '2024-12-25', TRUE);
 
 
 
