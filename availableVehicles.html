@@ -115,6 +115,7 @@
 <body>
 
     <h1>Available Vehicles</h1>
+    <p style="color: red; text-align: center;">Note: You will not be able to change or cancel your reservation 1 hour before your rental starts.</p>
     <table>
         <thead>
             <tr>
@@ -237,7 +238,7 @@ function submitReservation() {
         end_time: endTime,
         total_price: totalPrice
     };
-    fetch('http://localhost:8080/reservations',{
+    fetch('http://localhost:8080/reserve',{
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',

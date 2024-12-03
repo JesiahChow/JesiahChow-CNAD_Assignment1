@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Reservations</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f7f7f7;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+        th {
+            background-color: #f4f4f9;
+        }
+        .action-btn {
+            padding: 8px 12px;
+            background-color: #004494;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+            padding-top: 60px;
+        }
+        .modal-content {
+            background-color: #fff;
+            margin: 5% auto;
+            padding: 20px;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 500px;
+        }
+        .close {
+            color: #aaa;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            top: 10px;
+            right: 20px;
+        }
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .back-btn {
+            padding: 10px 15px;
+            background-color: #004494;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            margin: 20px auto;
+            border-radius: 5px;
+        }
+        .back-btn:hover {
+            background-color: #003377;
+        }
+        footer {
+            text-align: center;
+            padding: 20px;
+            background-color: #004494;
+            color: white;
+            font-size: 14px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>My Reservations</h1>
+    <button class="back-btn" onclick="window.location.href='/home'">Back to Home</button>
+    <table>
+        <thead>
+            <tr>
+                <th>Reservation ID</th>
+                <th>Vehicle</th>
+                <th>Start Time</th>
+                <th>End Time</th>
+                <th>Status</th>
+                <th>Total Price</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <!--retrieve reservation details based on user and display them-->
+        <tbody id="reservationTable">
+            {{range .Reservations}}
+                <tr id="reservation-{{.ID}}">
+                    <td>{{.ID}}</td>
+                    <td>{{.VehicleInfo.Model}} ({{.VehicleInfo.LicensePlate}})</td>
+                    <td>{{.StartTime}}</td>
+                    <td>{{.EndTime}}</td>
+                    <td>{{.Status}}</td>
+                    <td>$ {{.TotalPrice}}</td>
+                    <td>
+                        <!--Open modify modal if user wants to modify reservations-->
+                        <button class="action-btn" 
+                                onclick="openModifyModal('{{.ID}}', '{{.StartTime}}', '{{.EndTime}}', '{{.TotalPrice}}', '{{.VehicleInfo.HourlyRate}}')">
+                            Modify
+                        </button>
+                        <button class="action-btn" onclick="cancelReservation('{{.ID}}')">Cancel Reservation</button>
+                        <button class="action-btn" onclick="payReservation('{{.ID}}')">Pay</button>
+                    </td>
+                </tr>
+            {{else}}
+                <tr>
+                    <td colspan="7">No reservations found.</td>
+                </tr>
+            {{end}}
+        </tbody>
+    </table>
+
+    <div id="modifyModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>Modify Reservation</h2>
+            <label for="startTime">Start Time:</label>
+            <input type="datetime-local" id="startTime" onchange="calculateTotalPrice()">
+            <br><br>
+            <label for="endTime">End Time:</label>
+            <input type="datetime-local" id="endTime" onchange="calculateTotalPrice()">
+            <br><br>
+            <label for="totalPrice">Total Price:</label>
+            <input type="number" id="totalPrice" readonly>
+            <br><br>
+            <button class="action-btn" onclick="updateReservation()">Confirm Update</button>
+            <button class="action-btn" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2024 Better Call Volt. All rights reserved.</p>
+    </footer>
+
+    <script>
+        let currentReservationID;
+        let currentHourlyRate;
+
+function openModifyModal(reservationID, startTime, endTime, totalPrice, hourlyRate) {
+    currentReservationID = reservationID;
+    currentHourlyRate = hourlyRate;
+
+    // Ensure totalPrice is a valid number
+    totalPrice = parseFloat(totalPrice);
+    if (isNaN(totalPrice)) {
+        alert("Invalid total price value.");
+        return;
+    }
+
+    // Convert to proper format for datetime-local input (YYYY-MM-DDTHH:mm)
+    document.getElementById('startTime').value = startTime.replace(' ', 'T');
+    document.getElementById('endTime').value = endTime.replace(' ', 'T');
+    
+    // Show the total price in the modal (ensure it's a valid number)
+    document.getElementById('totalPrice').value = totalPrice.toFixed(2); // Show the total price
+
+    // Show the modal
+    document.getElementById('modifyModal').style.display = 'block';
+}
+function closeModal() {
+    document.getElementById('modifyModal').style.display = 'none';
+}
+
+function calculateTotalPrice() {
+    const startTimeInput = document.getElementById('startTime').value;
+    const endTimeInput = document.getElementById('endTime').value;
+
+    // Validate if both times are valid
+    const startTime = new Date(startTimeInput);
+    const endTime = new Date(endTimeInput);
+
+    // Check if the date objects are valid
+    if (isNaN(startTime) || isNaN(endTime)) {
+        alert("Please enter valid start and end times.");
+        document.getElementById('totalPrice').value = '';
+        return;
+    }
+
+    // Ensure the end time is after the start time
+    if (startTime >= endTime) {
+        alert("End time must be after start time.");
+        document.getElementById('totalPrice').value = '';
+        return;
+    }
+
+    // Calculate the total hours and update the price
+    const hours = (endTime - startTime) / (1000 * 60 * 60); // Convert milliseconds to hours
+    const totalPrice = hours * currentHourlyRate;
+
+    // Set the total price in the input field
+    document.getElementById('totalPrice').value = totalPrice.toFixed(2);
+}
+
+function updateReservation() {
+    const startTimeInput = document.getElementById('startTime').value;
+    const endTimeInput = document.getElementById('endTime').value;
+    const totalPrice = parseFloat(document.getElementById('totalPrice').value);
+
+    if (!startTimeInput || !endTimeInput || isNaN(totalPrice) || totalPrice <= 0) {
+        alert("Please complete all fields with valid data.");
+        return;
+    }
+
+    // Format the datetime-local values to match backend expectations
+    const formattedStartTime = startTimeInput.replace('T', ' ') + ":00";
+    const formattedEndTime = endTimeInput.replace('T', ' ') + ":00";
+
+    const reservationDetails = {
+        start_time: formattedStartTime,
+        end_time: formattedEndTime,
+        total_price: totalPrice,
+    };
+// Check if the reservation is within 1 hour of start time
+if (isWithinOneHour(formattedStartTime)) {
+        alert("You cannot cancel the reservation within 1 hour of the start time.");
+        return;
+    }
+    fetch(`/reservations/update/${currentReservationID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reservationDetails),
+    })
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => { throw new Error(text); }); // Handle non-JSON responses
+            }
+            return response.json(); // Parse JSON if the response is OK
+        })
+        .then(data => {
+            if (data.message) {
+                const row = document.getElementById(`reservation-${currentReservationID}`);
+                if (row) {
+                    // Update the row with the modified values
+                    row.children[2].innerText = formattedStartTime; // Update Start Time
+                    row.children[3].innerText = formattedEndTime;   // Update End Time
+                    row.children[5].innerText = `$${totalPrice.toFixed(2)}`; // Update Total Price
+                }
+                closeModal();
+                alert("Reservation updated successfully!");
+            }
+        })
+        .catch(err => {
+            console.error("Error during reservation update:", err.message);
+            alert(`Failed to update reservation: ${err.message}`);
+        });
+}
+function isWithinOneHour(startTime) {
+    const reservationStartTime = new Date(startTime);
+    const currentTime = new Date();
+    const timeDifference = reservationStartTime - currentTime;
+
+    return timeDifference <= 60 * 60 * 1000; // 1 hour = 60 minutes = 3600 seconds = 3600000 milliseconds
+}
+function cancelReservation(reservationID) {
+    // Make sure reservationID is valid
+    if (!reservationID) {
+        alert("Invalid reservation ID.");
+        return;
+    }
+// Check if the reservation is within 1 hour of start time
+if (isWithinOneHour(startTime)) {
+        alert("You cannot cancel the reservation within 1 hour of the start time.");
+        return;
+    }
+    fetch(`/reservations/cancel/${reservationID}`, {
+        method: 'DELETE',
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(text => { throw new Error(text); });
+        }
+        return response.json();
+    })
+    .then(data => {
+        alert(data.message);  // Show success message
+
+        // Attempt to find the reservation row by ID
+        const row = document.getElementById(`reservation-${reservationID}`);
+        
+        if (row) {
+            // If the row is found, remove it from the table
+            row.remove();
+            console.log(`Reservation row with ID 'reservation-${reservationID}' removed.`);
+        } else {
+            console.error(`Reservation row with ID 'reservation-${reservationID}' not found.`);
+        }
+    })
+    .catch(error => {
+        console.error('Error canceling reservation:', error);
+        alert('Failed to cancel reservation.');
+    });
+}
+
+
+    </script>
+</body>
+</html>

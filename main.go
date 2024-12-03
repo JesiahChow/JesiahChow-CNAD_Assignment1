@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/smtp"
 	"text/template"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/gorilla/handlers"
@@ -76,6 +77,15 @@ func init() {
 	fmt.Println("Billing Service database connected successfully!")
 }
 
+// struct to represent vehicle
+type Vehicle struct {
+	ID           int     `json:"id"`
+	LicensePlate string  `json:"license_plate"`
+	Model        string  `json:"model"`
+	Location     string  `json:"location"`
+	HourlyRate   float64 `json:"hourly_rate"`
+}
+
 // Hash password
 func hashPassword(password string) string {
 	hash := sha256.New()
@@ -95,6 +105,7 @@ func generateVerificationToken() string {
 
 // Send the verification email
 func sendVerificationEmail(email, token string) {
+	log.Printf("Simulating email sending to %s with token: %s\n", email, token)
 	// Generate the verification link
 	link := fmt.Sprintf("http://localhost:8080/verify?token=%s", token)
 
@@ -177,6 +188,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		username := r.FormValue("username")
 		email := r.FormValue("email")
 		password := r.FormValue("password")
+		log.Printf("Received registration data: username=%s, email=%s", username, email)
 
 		// Check if the username already exists in the database
 		var existingUsername string
@@ -215,7 +227,9 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		// Hash the password
 		passwordHash := hashPassword(password)
+		log.Println("Password hashed successfully")
 		verificationToken := generateVerificationToken()
+		log.Printf("Generated verification token: %s", verificationToken)
 
 		// Insert into the database
 		_, err = userdb.Exec("INSERT INTO users (username, email, password_hash, verification_token) VALUES (?, ?, ?, ?)",
@@ -518,15 +532,6 @@ func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-// struct to represent vehicle
-type Vehicle struct {
-	ID           int     `json:"id"`
-	LicensePlate string  `json:"license_plate"`
-	Model        string  `json:"model"`
-	Location     string  `json:"location"`
-	HourlyRate   float64 `json:"hourly_rate"`
-}
-
 // view available vehicles in real-time
 func availableVehiclesHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -601,6 +606,7 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
+	// struct to represent reservation
 	var reservation struct {
 		UserID     int     `json:"user_id"`
 		VehicleID  int     `json:"vehicle_id"`
@@ -608,6 +614,7 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 		EndTime    string  `json:"end_time"`
 		TotalPrice float64 `json:"total_price"`
 	}
+
 	// Decode the reservation details from the request body
 	err := json.NewDecoder(r.Body).Decode(&reservation)
 	if err != nil {
@@ -642,7 +649,7 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error reserving vehicle", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Vehicle Service Response: %v\n", resp.StatusCode) // Add this to log the status code of the response
+	log.Printf("Vehicle Service Response: %v\n", resp.StatusCode) //log the status code of the response
 	if resp.StatusCode != http.StatusOK {
 		http.Error(w, "Error reserving vehicle", http.StatusInternalServerError)
 		return
@@ -668,7 +675,7 @@ func reserveVehicleHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error updating vehicle status in Vehicle Service: %v\n", err)
 		return
 	}
-	log.Printf("Vehicle ID %d status updated to 'reserved'", vehicleID)
+	log.Printf("Vehicle ID %s status updated to 'reserved'", vehicleID)
 	// Respond with a success message
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -701,12 +708,311 @@ func VehiclesPageHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	log.Printf("user id: %d \n", userID)
 }
+
+// retrieve vehicle information to display reservation details
+func getVehicleDetailsHandler(w http.ResponseWriter, r *http.Request) {
+	vehicleID := mux.Vars(r)["vehicle_id"]
+
+	var vehicle struct {
+		ID           int     `json:"id"`
+		LicensePlate string  `json:"license_plate"`
+		Model        string  `json:"model"`
+		Status       string  `json:"status"`
+		Location     string  `json:"location"`
+		HourlyRate   float64 `json:"hourly_rate"`
+	}
+
+	err := vehicledb.QueryRow(
+		"SELECT id, license_plate, model, status, location, hourly_rate FROM vehicles WHERE id = ?",
+		vehicleID,
+	).Scan(&vehicle.ID, &vehicle.LicensePlate, &vehicle.Model, &vehicle.Status, &vehicle.Location, &vehicle.HourlyRate)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Vehicle not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Error fetching vehicle details", http.StatusInternalServerError)
+			log.Printf("Error querying vehicle: %v\n", err)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(vehicle)
+}
+
+// Handler to get reservations
+func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "user-session")
+	loggedIn, _ := session.Values["loggedIn"].(bool)
+	userID, _ := session.Values["UserID"].(int)
+
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// Fetch reservations for the user
+	rows, err := reservationdb.Query("SELECT id, vehicle_id, start_time, end_time, total_price, status FROM reservations WHERE user_id = ? and status = 'active'", userID)
+	if err != nil {
+		http.Error(w, "Error fetching reservations", http.StatusInternalServerError)
+		log.Printf("Database query error: %v\n", err)
+		return
+	}
+	defer rows.Close()
+
+	var reservations []struct {
+		ID          int     `json:"id"`
+		VehicleID   int     `json:"vehicle_id"`
+		StartTime   string  `json:"start_time"`
+		EndTime     string  `json:"end_time"`
+		TotalPrice  float64 `json:"total_price"`
+		Status      string  `json:"status"`
+		VehicleInfo struct {
+			LicensePlate string  `json:"license_plate"`
+			Model        string  `json:"model"`
+			Status       string  `json:"status"`
+			Location     string  `json:"location"`
+			HourlyRate   float64 `json:"hourly_rate"`
+		} `json:"vehicle_info"`
+	}
+
+	// Loop through each reservation
+	for rows.Next() {
+		var reservation struct {
+			ID          int     `json:"id"`
+			VehicleID   int     `json:"vehicle_id"`
+			StartTime   string  `json:"start_time"`
+			EndTime     string  `json:"end_time"`
+			TotalPrice  float64 `json:"total_price"`
+			Status      string  `json:"status"`
+			VehicleInfo struct {
+				LicensePlate string  `json:"license_plate"`
+				Model        string  `json:"model"`
+				Status       string  `json:"status"`
+				Location     string  `json:"location"`
+				HourlyRate   float64 `json:"hourly_rate"`
+			} `json:"vehicle_info"`
+		}
+
+		// Scan reservation data
+		err := rows.Scan(&reservation.ID, &reservation.VehicleID, &reservation.StartTime, &reservation.EndTime, &reservation.TotalPrice, &reservation.Status)
+		if err != nil {
+			http.Error(w, "Error scanning reservations", http.StatusInternalServerError)
+			log.Printf("Error scanning row: %v\n", err)
+			return
+		}
+
+		// Fetch vehicle details from Vehicle Service (assuming vehicle info is available through API)
+		vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/%d", reservation.VehicleID)
+		resp, err := http.Get(vehicleServiceURL)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			log.Printf("Error fetching vehicle details for vehicle_id %d: %v\n", reservation.VehicleID, err)
+			continue
+		}
+
+		// Decode vehicle details
+		err = json.NewDecoder(resp.Body).Decode(&reservation.VehicleInfo)
+		if err != nil {
+			log.Printf("Error decoding vehicle details: %v\n", err)
+			continue
+		}
+
+		// Append the reservation to the list
+		reservations = append(reservations, reservation)
+	}
+
+	// Render the reservations page with the fetched data
+	tmpl, err := template.ParseFiles("reservations.html")
+	if err != nil {
+		http.Error(w, "Error loading template", http.StatusInternalServerError)
+		log.Printf("Template parsing error: %v", err)
+		return
+	}
+
+	// Pass the user ID and reservations data to the template
+	tmpl.Execute(w, map[string]interface{}{
+		"UserID":       userID,
+		"Reservations": reservations, // Pass reservations to the template
+	})
+}
+
+// Check if the modification is allowed (e.g., within 1 hour before the reservation start time)
+func isModificationAllowed(reservationID string) bool {
+	// Get the reservation start time from the database
+	var startTime string
+	query := "SELECT start_time FROM reservations WHERE id = ?"
+	err := reservationdb.QueryRow(query, reservationID).Scan(&startTime)
+	if err != nil {
+		log.Printf("Error fetching reservation start time: %v\n", err)
+		return false // If an error occurs, disallow modification
+	}
+
+	// Parse the start time into a time.Time object
+	reservationStartTime, err := time.Parse("2006-01-02 15:04:05", startTime)
+	if err != nil {
+		log.Printf("Error parsing reservation start time: %v\n", err)
+		return false // If parsing fails, disallow modification
+	}
+
+	// Get the current time
+	currentTime := time.Now()
+
+	// Ensure the current time is in the same timezone as reservationStartTime (set both times to UTC or local)
+	// Ensure the current time is in the same timezone as reservationStartTime
+	if reservationStartTime.Sub(currentTime) <= 1*time.Hour {
+		return false // reservation is not allowed within 1 hour of the start time
+	}
+
+	// Check if the current time is within 1 hour of the reservation start time
+	if reservationStartTime.Sub(currentTime) <= 1*time.Hour {
+		log.Printf("Modification not allowed: current time (%v) is within 1 hour of reservation start time (%v)\n", currentTime, reservationStartTime)
+		return false // Modification is not allowed within 1 hour of the start time
+	}
+
+	log.Printf("Current Time: %v, Reservation Start Time: %v", currentTime, reservationStartTime)
+	return true // Reservation can be modified if it's more than 1 hour before the start time
+}
+
+// update reservation in the database based on user input
+func updateReservationHandler(w http.ResponseWriter, r *http.Request) {
+	// Ensure the request is PUT
+	if r.Method != http.MethodPut {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get reservation ID from URL
+	reservationID := mux.Vars(r)["id"]
+
+	// Parse the request body
+	var reservation struct {
+		StartTime  string  `json:"start_time"`
+		EndTime    string  `json:"end_time"`
+		TotalPrice float64 `json:"total_price"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&reservation)
+	if err != nil {
+		http.Error(w, "Error decoding request body", http.StatusInternalServerError)
+		return
+	}
+
+	// Check if modification is allowed (within 1 hour policy)
+	if !isModificationAllowed(reservationID) {
+		http.Error(w, "Modification not allowed within 1 hour of start time", http.StatusBadRequest)
+		return
+	}
+
+	// Parse the start time and end time
+	startTime, err := time.Parse("2006-01-02 15:04:05", reservation.StartTime)
+	if err != nil {
+		http.Error(w, "Invalid start time format", http.StatusBadRequest)
+		return
+	}
+
+	endTime, err := time.Parse("2006-01-02 15:04:05", reservation.EndTime)
+	if err != nil {
+		http.Error(w, "Invalid end time format", http.StatusBadRequest)
+		return
+	}
+
+	// Update the reservation in the database
+	_, err = reservationdb.Exec("UPDATE reservations SET start_time = ?, end_time = ?, total_price = ? WHERE id = ?", startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"), reservation.TotalPrice, reservationID)
+	if err != nil {
+		http.Error(w, "Error updating reservation", http.StatusInternalServerError)
+		return
+	}
+
+	// Send success response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Reservation updated successfully!",
+	})
+}
+
+// updateVehicleAvailability updates vehicle status to available
+func updateVehicleAvailability(vehicleID int) error {
+	_, err := vehicledb.Exec("UPDATE vehicles SET status = 'available' WHERE id = ?", vehicleID)
+	return err
+}
+
+// isCancellationAllowed checks if cancellation is allowed based on the policy
+func isCancellationAllowed(reservationID string) bool {
+	var startTime string
+	query := "SELECT start_time FROM reservations WHERE id = ?"
+	err := reservationdb.QueryRow(query, reservationID).Scan(&startTime)
+	if err != nil {
+		log.Printf("Error fetching reservation start time: %v\n", err)
+		return false // If an error occurs, disallow cancellation
+	}
+
+	// Parse the start time into a time.Time object
+	reservationStartTime, err := time.Parse("2006-01-02 15:04:05", startTime)
+	if err != nil {
+		log.Printf("Error parsing reservation start time: %v\n", err)
+		return false // If parsing fails, disallow cancellation
+	}
+
+	// Get the current time
+	currentTime := time.Now()
+
+	// Ensure the current time is in the same timezone as reservationStartTime
+	if reservationStartTime.Sub(currentTime) <= 1*time.Hour {
+		return false // Cancellation is not allowed within 1 hour of the start time
+	}
+	log.Printf("Current Time: %v, Reservation Start Time: %v", currentTime, reservationStartTime)
+
+	return true // Cancellation is allowed if it's more than 1 hour before the start time
+}
+
+// Cancel Reservation Handler with Policies
+func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+
+	reservationID := mux.Vars(r)["id"]
+
+	// Check if the cancellation is allowed (e.g., within 1 hour1 before the reservation start time)
+	if !isCancellationAllowed(reservationID) {
+		http.Error(w, "Cancellation not allowed within 1 hour of start time", http.StatusBadRequest)
+		return
+	}
+
+	// Mark the reservation as canceled in the database
+	_, err := reservationdb.Exec("UPDATE reservations SET status = 'canceled' WHERE id = ?", reservationID)
+	if err != nil {
+		http.Error(w, "Error canceling reservation", http.StatusInternalServerError)
+		return
+	}
+	// Get vehicle ID associated with the reservation
+	var vehicleID int
+	err = reservationdb.QueryRow("SELECT vehicle_id FROM reservations WHERE id = ?", reservationID).Scan(&vehicleID)
+	if err != nil {
+		http.Error(w, "Error fetching vehicle ID", http.StatusInternalServerError)
+		return
+	}
+
+	// Update the vehicle availability to 'available'
+	err = updateVehicleAvailability(vehicleID)
+	if err != nil {
+		http.Error(w, "Error updating vehicle availability", http.StatusInternalServerError)
+		return
+	}
+	// Send success response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Reservation canceled and vehicle status updated to 'available' successfully!",
+	})
+}
 func main() {
 	// Create a new router
 	r := mux.NewRouter()
 
 	// Static file serving
-	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	r.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "index.html")
 	})
 
@@ -721,7 +1027,14 @@ func main() {
 	// Handle available vehicles API
 	r.HandleFunc("/vehicles", VehiclesPageHandler)
 	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
-	r.HandleFunc("/reservations", createReservationHandler)
+	r.HandleFunc("/reserve", createReservationHandler)
+	r.HandleFunc("/reservations", getReservationsHandler).Methods("GET")
+	r.HandleFunc("/vehicles/{vehicle_id}", getVehicleDetailsHandler).Methods("GET")
+	//update reservation details
+	r.HandleFunc("/reservations/update/{id}", updateReservationHandler).Methods("PUT")
+	//cancel reservation details
+	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("DELETE")
+	//set vehicle status to 'reserved'
 	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST")
 
 	// Apply CORS middleware

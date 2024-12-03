@@ -6,15 +6,7 @@ USE user_service_db;
 
 -- Users Table
 CREATE TABLE users (
--- Membership Tiers Table
-CREATE TABLE membership_tiers (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(50) UNIQUE NOT NULL,
-    benefits TEXT,
-    discount_rate DECIMAL(5, 2),
-    price DECIMAL(10, 2) DEFAULT 0 -- price for upgrading
-    
-    id INT AUTO_INCREMENT PRIMARY KEY,
+      id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
     email VARCHAR(100) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -23,9 +15,16 @@ CREATE TABLE membership_tiers (
     verification_token VARCHAR(255),
     is_verified BOOLEAN DEFAULT FALSE,
     FOREIGN KEY (membership_tier_id) REFERENCES membership_tiers(id)
-    --additional addon
+);
     ALTER TABLE users
     MODIFY COLUMN membership_tier_id INT DEFAULT 1;
+-- Membership Tiers Table
+CREATE TABLE membership_tiers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) UNIQUE NOT NULL,
+    benefits TEXT,
+    discount_rate DECIMAL(5, 2),
+    price DECIMAL(10, 2) DEFAULT 0 -- price for upgrading
 );
 
 INSERT INTO user_service_db.users (username, email, password_hash, membership_tier_id, verification_token, is_verified) VALUES
@@ -36,7 +35,7 @@ INSERT INTO user_service_db.membership_tiers (name, benefits, discount_rate, pri
 ('Basic', 'Access to basic vehicle rental benefits.', 5.00, 0),
 ('Premium', 'Access to premium vehicle rental benefits, including priority booking.', 15.00, 50.00),
 ('VIP', 'Access to VIP vehicle rental benefits, including exclusive vehicles and priority booking.', 25.00, 100.00);
-);
+
 -- Create Vehicle Service Database
 CREATE DATABASE vehicle_service_db;
 
