@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/smtp"
+	"strconv"
 	"text/template"
 	"time"
 
@@ -84,6 +85,25 @@ type Vehicle struct {
 	Model        string  `json:"model"`
 	Location     string  `json:"location"`
 	HourlyRate   float64 `json:"hourly_rate"`
+}
+
+// Define Reservation struct and VehicleInfo struct
+type VehicleInfo struct {
+	LicensePlate string  `json:"license_plate"`
+	Model        string  `json:"model"`
+	Status       string  `json:"status"`
+	Location     string  `json:"location"`
+	HourlyRate   float64 `json:"hourly_rate"`
+}
+
+type Reservation struct {
+	ID          int         `json:"id"`
+	VehicleID   int         `json:"vehicle_id"`
+	StartTime   string      `json:"start_time"`
+	EndTime     string      `json:"end_time"`
+	TotalPrice  float64     `json:"total_price"`
+	Status      string      `json:"status"`
+	VehicleInfo VehicleInfo `json:"vehicle_info"`
 }
 
 // Hash password
@@ -323,6 +343,7 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// renders the home page
 func homeHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "user-session")
 
@@ -471,6 +492,37 @@ type MembershipTier struct {
 	IsCurrent    bool
 }
 
+// Handle upgrading the user's membership tier
+func upgradeMembershipHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "user-session")
+	// Ensure the request is PUT
+	if r.Method != http.MethodPut {
+		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+		return
+	}
+	var userID int
+	// Get the membership tier ID from URL
+	membershipTierID := mux.Vars(r)["id"]
+	userID = session.Values["UserID"].(int) // Get the user ID from session or authentication context (replace with real value)
+
+	// Update the user's membership in the database
+	_, err := userdb.Exec("UPDATE users SET membership_tier_id = ? WHERE id = ?", membershipTierID, userID)
+	if err != nil {
+		http.Error(w, "Error upgrading membership", http.StatusInternalServerError)
+		log.Printf("Error updating membership: %v\n", err)
+		return
+	}
+	// Update the session with the new membership tier
+	session.Values["membershipTier"] = membershipTierID
+	session.Save(r, w)
+
+	// Respond with success message
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Membership upgraded successfully!",
+	})
+}
+
 // membershipHandler renders the membership page
 func membershipHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "user-session")
@@ -527,7 +579,11 @@ func membershipHandler(w http.ResponseWriter, r *http.Request) {
 
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "user-session")
+	// Clear session
 	session.Values["loggedIn"] = false
+	session.Values["username"] = nil
+	session.Values["membershipTier"] = nil
+	session.Values["UserID"] = nil
 	session.Save(r, w)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
@@ -972,7 +1028,6 @@ func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-
 	reservationID := mux.Vars(r)["id"]
 
 	// Check if the cancellation is allowed (e.g., within 1 hour1 before the reservation start time)
@@ -1007,6 +1062,107 @@ func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
 		"message": "Reservation canceled and vehicle status updated to 'available' successfully!",
 	})
 }
+
+// getReservationDetails fetches reservation details and returns them as a struct
+func getReservationDetails(reservationID int) (Reservation, error) {
+
+	// Fetch reservation details from the database
+	rows, err := reservationdb.Query("SELECT id, vehicle_id, start_time, end_time, total_price, status FROM reservations WHERE id = ? and status = 'active'", reservationID)
+	if err != nil {
+		return Reservation{}, fmt.Errorf("Error fetching reservations: %v", err)
+	}
+	defer rows.Close()
+
+	var reservations Reservation
+	if rows.Next() {
+		// Scan reservation data
+		err = rows.Scan(&reservations.ID, &reservations.VehicleID, &reservations.StartTime, &reservations.EndTime, &reservations.TotalPrice, &reservations.Status)
+		if err != nil {
+			return Reservation{}, fmt.Errorf("Error scanning reservations: %v", err)
+		}
+
+		// Fetch vehicle details from Vehicle Service (assuming vehicle info is available through API)
+		vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/%d", reservations.VehicleID)
+		resp, err := http.Get(vehicleServiceURL)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			return Reservation{}, fmt.Errorf("Error fetching vehicle details for vehicle_id %d: %v", reservations.VehicleID, err)
+		}
+
+		// Decode vehicle details
+		err = json.NewDecoder(resp.Body).Decode(&reservations.VehicleInfo)
+		if err != nil {
+			return Reservation{}, fmt.Errorf("Error decoding vehicle details: %v", err)
+		}
+	} else {
+		// No reservation found
+		return Reservation{}, fmt.Errorf("Reservation with ID %d not found", reservationID)
+	}
+
+	// Check for any error that occurred during iteration
+	if err := rows.Err(); err != nil {
+		return Reservation{}, fmt.Errorf("Error iterating over rows: %v", err)
+	}
+	return reservations, nil
+}
+
+// billingPageHandler serves the billing page and fetches reservation details
+func billingPageHandler(w http.ResponseWriter, r *http.Request) {
+	session, _ := store.Get(r, "user-session")
+	loggedIn, _ := session.Values["loggedIn"].(bool)
+	userID, _ := session.Values["UserID"].(int)
+	if !loggedIn {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+
+	// Extract reservationID from the query parameter
+	reservationIDStr := r.URL.Query().Get("reservationID")
+	if reservationIDStr == "" {
+		http.Error(w, "Reservation ID is missing", http.StatusBadRequest)
+		return
+	}
+
+	// Convert reservationID to integer
+	reservationID, err := strconv.Atoi(reservationIDStr)
+	if err != nil {
+		http.Error(w, "Invalid reservation ID", http.StatusBadRequest)
+		log.Printf("Error converting reservation ID to integer: %v", err)
+		return
+	}
+
+	// Fetch reservation details using the getReservationDetails function
+	reservationDetails, err := getReservationDetails(reservationID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error fetching reservation details: %v", err), http.StatusInternalServerError)
+		log.Printf("Error fetching reservation details: %v", err)
+		return
+	}
+
+	// Serve the HTML page for billing and pass the reservation details and user ID
+	tmpl, err := template.ParseFiles("billing.html")
+	if err != nil {
+		http.Error(w, "Error loading template", http.StatusInternalServerError)
+		log.Printf("Template parsing error: %v", err)
+		return
+	}
+
+	// Pass the concrete Reservation struct, not an interface{}
+	err = tmpl.Execute(w, struct {
+		UserID            int
+		ReservationDetail Reservation
+	}{
+		UserID:            userID,
+		ReservationDetail: reservationDetails, // Directly pass Reservation struct
+	})
+	if err != nil {
+		http.Error(w, "Error rendering template", http.StatusInternalServerError)
+		log.Printf("Template rendering error: %v", err)
+		return
+	}
+
+	log.Printf("Displayed billing page for reservationID: %d", reservationID)
+}
+
 func main() {
 	// Create a new router
 	r := mux.NewRouter()
@@ -1024,6 +1180,8 @@ func main() {
 	r.HandleFunc("/membership", membershipHandler)
 	r.HandleFunc("/verify", verifyHandler) // Email verification handler
 	r.HandleFunc("/logout", logoutHandler) // Logout handler
+	// Membership Upgrade API
+	r.HandleFunc("/membership/upgrade/{id}", upgradeMembershipHandler).Methods("PUT")
 	// Handle available vehicles API
 	r.HandleFunc("/vehicles", VehiclesPageHandler)
 	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
@@ -1036,6 +1194,8 @@ func main() {
 	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("DELETE")
 	//set vehicle status to 'reserved'
 	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST")
+	// Serves the billing page
+	r.HandleFunc("/billing", billingPageHandler)
 
 	// Apply CORS middleware
 	log.Println("Server started at http://localhost:8080")

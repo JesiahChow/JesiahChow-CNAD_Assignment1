@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Billing Page</title>
+    <style>
+    body {
+        font-family: Arial, sans-serif;
+        margin: 20px;
+    }
+
+    h1 {
+        text-align: center;
+    }
+
+    h2 {
+        color: #2c3e50;
+    }
+
+    #reservation-details, #vehicle-details {
+        margin-bottom: 20px;
+        padding: 10px;
+        background-color: #f4f4f4;
+        border-radius: 5px;
+    }
+
+    strong {
+        font-weight: bold;
+    }
+    footer {
+            text-align: center;
+            padding: 20px;
+            background-color: #004494;
+            color: white;
+            font-size: 14px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    
+    <h1>Reservation Billing</h1>
+    
+    <!-- Reservation and Vehicle Details Section -->
+    <div id="reservation-details">
+        <h2>Reservation Information</h2>
+        <p><strong>Reservation ID:</strong> {{.ReservationDetail.ID}}</p>
+        <p><strong>Start Time:</strong> {{.ReservationDetail.StartTime}}</p>
+        <p><strong>End Time:</strong> {{.ReservationDetail.EndTime}}</p>
+        <p><strong>Total Price:</strong> ${{.ReservationDetail.TotalPrice}}</p>
+        <p><strong>Status:</strong> {{.ReservationDetail.Status}}</p>
+    </div>
+    
+    <!-- Vehicle Details Section -->
+    <div id="vehicle-details">
+        <h2>Vehicle Information</h2>
+        <p><strong>License Plate:</strong> {{.ReservationDetail.VehicleInfo.LicensePlate}}</p>
+        <p><strong>Model:</strong> {{.ReservationDetail.VehicleInfo.Model}}</p>
+        <p><strong>Status:</strong> {{.ReservationDetail.VehicleInfo.Status}}</p>
+        <p><strong>Location:</strong> {{.ReservationDetail.VehicleInfo.Location}}</p>
+        <p><strong>Hourly Rate:</strong> ${{.ReservationDetail.VehicleInfo.HourlyRate}}</p>
+    </div>
+
+</body>
+</html>

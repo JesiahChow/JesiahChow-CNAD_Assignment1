@@ -123,7 +123,7 @@
                 </p>
                 <form method="POST" action="/upgrade">
                     <input type="hidden" name="membership_tier_id" value="{{.ID}}">
-                    <button type="submit">Upgrade to {{.Name}}</button>
+                    <button type="submit" onclick="upgradeMembership('{{.ID}}', '{{.Name}}')">Upgrade to {{.Name}}</button>
                 </form>
             {{end}}
         </div>
@@ -132,5 +132,31 @@
         <!-- Back Button -->
         <a href="/home" class="back-btn">Back to Dashboard</a>
     </div>
+    <script>
+        // Upgrade Membership via API
+        function upgradeMembership(membershipTierID, tierName) {
+            // Call REST API to upgrade user membership
+            fetch(`/membership/upgrade/${membershipTierID}`, {
+                method: 'PUT', 
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    alert(`${tierName} membership upgraded successfully!`);
+                    // reload the page after updating
+                    window.location.href = "/home"; // Redirect to the home page
+                } else {
+                    alert("Failed to upgrade membership.");
+                }
+            })
+            .catch(error => {
+                console.error("Error upgrading membership:", error);
+                alert("Failed to upgrade membership.");
+            });
+        }
+    </script>
 </body>
 </html>

@@ -186,6 +186,10 @@ function openModifyModal(reservationID, startTime, endTime, totalPrice, hourlyRa
 function closeModal() {
     document.getElementById('modifyModal').style.display = 'none';
 }
+function payReservation(reservationID) {
+    // Redirect to billing page with reservation ID
+    window.location.href = `/billing?reservationID=${reservationID}`;
+}
 
 function calculateTotalPrice() {
     const startTimeInput = document.getElementById('startTime').value;
