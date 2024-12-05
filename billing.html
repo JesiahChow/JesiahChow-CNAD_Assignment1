@@ -5,30 +5,107 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Billing Page</title>
     <style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 20px;
-    }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            background-color: #f4f4f9;
+            color: #333;
+        }
 
-    h1 {
-        text-align: center;
-    }
+        header {
+            background-color: #004494;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
 
-    h2 {
-        color: #2c3e50;
-    }
+        h1 {
+            margin: 0;
+            font-size: 28px;
+        }
 
-    #reservation-details, #vehicle-details {
-        margin-bottom: 20px;
-        padding: 10px;
-        background-color: #f4f4f4;
-        border-radius: 5px;
-    }
+        .billing-container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
 
-    strong {
-        font-weight: bold;
-    }
-    footer {
+        .billing-section {
+            margin-bottom: 20px;
+        }
+
+        .billing-section p {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+
+        strong {
+            font-weight: bold;
+        }
+
+        .total-price {
+            font-size: 24px;
+            color: #2c3e50;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        .discount-section {
+            margin-top: 30px;
+        }
+
+        .discount-section p {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+
+        .promo-code {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .promo-code input {
+            padding: 10px;
+            width: 70%;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+
+        .promo-code button {
+            background-color: #004494;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .promo-code button:hover {
+            background-color: #003377;
+        }
+
+        .back-btn, .confirm-btn {
+            display: inline-block;
+            background-color: #004494;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background-color 0.3s ease;
+        }
+
+        .back-btn:hover, .confirm-btn:hover {
+            background-color: #003377;
+        }
+
+        footer {
             text-align: center;
             padding: 20px;
             background-color: #004494;
@@ -42,27 +119,135 @@
 </head>
 <body>
     
-    <h1>Reservation Billing</h1>
+    <header>
+        <h1>Billing Details</h1>
+    </header>
     
-    <!-- Reservation and Vehicle Details Section -->
-    <div id="reservation-details">
-        <h2>Reservation Information</h2>
-        <p><strong>Reservation ID:</strong> {{.ReservationDetail.ID}}</p>
-        <p><strong>Start Time:</strong> {{.ReservationDetail.StartTime}}</p>
-        <p><strong>End Time:</strong> {{.ReservationDetail.EndTime}}</p>
-        <p><strong>Total Price:</strong> ${{.ReservationDetail.TotalPrice}}</p>
-        <p><strong>Status:</strong> {{.ReservationDetail.Status}}</p>
-    </div>
-    
-    <!-- Vehicle Details Section -->
-    <div id="vehicle-details">
-        <h2>Vehicle Information</h2>
-        <p><strong>License Plate:</strong> {{.ReservationDetail.VehicleInfo.LicensePlate}}</p>
-        <p><strong>Model:</strong> {{.ReservationDetail.VehicleInfo.Model}}</p>
-        <p><strong>Status:</strong> {{.ReservationDetail.VehicleInfo.Status}}</p>
-        <p><strong>Location:</strong> {{.ReservationDetail.VehicleInfo.Location}}</p>
-        <p><strong>Hourly Rate:</strong> ${{.ReservationDetail.VehicleInfo.HourlyRate}}</p>
+    <div class="billing-container">
+        <!-- Reservation Details -->
+        <div class="billing-section">
+            <p><strong>Reservation ID:</strong> {{.ReservationDetail.ID}}</p>
+            <p><strong>Start Time:</strong> {{.ReservationDetail.StartTime}}</p>
+            <p><strong>End Time:</strong> {{.ReservationDetail.EndTime}}</p>
+        </div>
+        
+        <!-- Vehicle Details -->
+        <div class="billing-section">
+            <p><strong>Vehicle Model:</strong> {{.ReservationDetail.VehicleInfo.Model}}</p>
+            <p><strong>License Plate:</strong> {{.ReservationDetail.VehicleInfo.LicensePlate}}</p>
+        </div>
+
+        <!-- Total Price -->
+        <div class="billing-section">
+            <p class="total-price"><strong>Total Price:</strong> ${{.ReservationDetail.TotalPrice}}</p>
+        </div>
+
+        <!-- Membership Discount -->
+        <div class="discount-section">
+            <p><strong>Membership Discount:</strong> {{.MembershipDiscount}}% off</p>
+            <p><strong>Promotion Discount:</strong> {{.PromoDiscount}}% off</p>
+        </div>
+
+        <!-- Promo Code Input -->
+        <div class="promo-code">
+            <input type="text" id="promo-code" placeholder="Enter Promo Code (Optional)">
+            <button onclick="applyPromoCode()">Apply</button>
+        </div>
+
+        <!-- Confirm Payment Button -->
+        <div class="billing-section">
+            <p class="final-price"><strong>Final Price:</strong> ${{.FinalPrice}}</p>
+            <a href="#" class="confirm-btn" onclick="confirmPayment()">Confirm Payment</a>
+        </div>
+
+        <!-- Back Button -->
+        <a href="/home" class="back-btn">Back to Dashboard</a>
     </div>
 
+    <footer>
+        <p>&copy; 2024 Better Call Volt</p>
+    </footer>
+
+    <script>
+function applyPromoCode() {
+    const promoCode = document.getElementById("promo-code").value;
+    const promotion = {
+        promoCode:promoCode,
+        currentPrice:parseFloat('{{.FinalPrice}}' )
+    }
+    if (promoCode) {
+        fetch(`http://localhost:8080/promotion/apply`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(promotion),
+        })
+        .then(response => response.json())
+        .then(data => {
+    console.log("Server Response:", data); // Log server response to check the data structure
+
+    if (data.error) {
+        alert(data.error); // Show server error message
+    } else if (data.success) {
+        alert("Promo code applied successfully!");
+
+        const promoDiscount = data.discountRate;
+        const promoDiscountElement = document.querySelector('.discount-section p:nth-of-type(2)');
+
+        if (promoDiscountElement && promoDiscount >= 0) {
+            promoDiscountElement.innerHTML = `<strong>Promotion Discount:</strong> ${promoDiscount}% off`;
+
+            const newPrice = data.newPrice;
+            console.log("New Price:", newPrice); // Log newPrice to verify
+
+            const finalPriceElement = document.querySelector('.final-price');
+            if (finalPriceElement && typeof newPrice === 'number' && newPrice > 0) {
+                finalPriceElement.innerHTML = `<strong>Final Price:</strong> $${newPrice.toFixed(2)}`;
+            } else {
+                console.error("Invalid price returned from server:", newPrice);
+                alert("Failed to update final price.");
+            }
+        } else {
+            console.error("Promotion Discount element missing or invalid discount rate.");
+            alert("Unable to apply promotion discount.");
+        }
+    }
+})
+        .catch(error => {
+            console.error("Error applying promo code:", error);
+            alert("Failed to apply promo code.");
+        });
+    } else {
+        alert("Please enter a promo code.");
+    }
+}
+
+
+
+
+ // Confirm Payment functionality
+ function confirmPayment() {
+            const reservationID = '{{.ReservationDetail.ID}}'; // From template
+            const finalPrice = parseFloat('{{.FinalPrice}}'); // Final price after discounts
+
+            fetch(`http://localhost:8080/confirm-payment/${reservationID}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ finalPrice }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert("Payment confirmed and invoice sent!");
+                    window.location.href = '/confirmation'; // Navigate to confirmation page
+                } else {
+                    alert(data.error);
+                }
+            })
+            .catch(error => alert("Failed to confirm payment."));
+        }
+
+    </script>
 </body>
 </html>

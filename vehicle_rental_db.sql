@@ -88,21 +88,19 @@ CREATE DATABASE billing_service_db;
 
 USE billing_service_db;
 
--- Billing Table
-CREATE TABLE billing (
+CREATE TABLE invoices (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    reservation_id INT,
-    payment_status ENUM('pending', 'paid', 'failed'),
-    amount DECIMAL(10, 2),
+    user_id INT NOT NULL,
+    reservation_id INT NOT NULL,
+    membership_discount DECIMAL(5, 2),
+    promo_discount DECIMAL(5, 2),
+    final_amount DECIMAL(10, 2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('paid') DEFAULT 'paid',
+    invoice_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES user_service_db.users(id),
     FOREIGN KEY (reservation_id) REFERENCES reservation_service_db.reservations(id)
 );
-INSERT INTO billing_service_db.billing (reservation_id, payment_status, amount) VALUES
-(1, 'pending', 60.00),
-(2, 'paid', 72.00),
-(3, 'failed', 84.00),
-(4, 'pending', 88.00),
-(5, 'paid', 68.00);
 
 
 CREATE DATABASE promotion_service_db;
