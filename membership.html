@@ -136,7 +136,7 @@
         // Upgrade Membership via API
         function upgradeMembership(membershipTierID, tierName) {
             // Call REST API to upgrade user membership
-            fetch(`/membership/upgrade/${membershipTierID}`, {
+            fetch("/membership/upgrade/${membershipTierID}", {
                 method: 'PUT', 
                 headers: {
                     'Content-Type': 'application/json',

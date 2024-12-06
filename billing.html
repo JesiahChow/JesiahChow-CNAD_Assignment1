@@ -169,14 +169,20 @@
     </footer>
 
     <script>
+// Global variables to store updated values
+let updatedPromoDiscount = 0; // Default promo discount
+let updatedFinalPrice = parseFloat('{{.FinalPrice}}'); // Default final price
+
+// Function to apply promo code
 function applyPromoCode() {
     const promoCode = document.getElementById("promo-code").value;
     const promotion = {
-        promoCode:promoCode,
-        currentPrice:parseFloat('{{.FinalPrice}}' )
-    }
+        promoCode: promoCode,
+        currentPrice: parseFloat('{{.FinalPrice}}')
+    };
+
     if (promoCode) {
-        fetch(`http://localhost:8080/promotion/apply`, {
+        fetch("http://localhost:8080/promotion/apply", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -185,35 +191,36 @@ function applyPromoCode() {
         })
         .then(response => response.json())
         .then(data => {
-    console.log("Server Response:", data); // Log server response to check the data structure
+            console.log("Server Response:", data); // Log server response to check the data structure
 
-    if (data.error) {
-        alert(data.error); // Show server error message
-    } else if (data.success) {
-        alert("Promo code applied successfully!");
+            if (data.error) {
+                alert(data.error); // Show server error message
+            } else if (data.success) {
+                alert("Promo code applied successfully!");
 
-        const promoDiscount = data.discountRate;
-        const promoDiscountElement = document.querySelector('.discount-section p:nth-of-type(2)');
+                const promoDiscount = data.discountRate;
+                const promoDiscountElement = document.querySelector('.discount-section p:nth-of-type(2)');
 
-        if (promoDiscountElement && promoDiscount >= 0) {
-            promoDiscountElement.innerHTML = `<strong>Promotion Discount:</strong> ${promoDiscount}% off`;
+                if (promoDiscountElement && promoDiscount >= 0) {
+                    promoDiscountElement.innerHTML = `<strong>Promotion Discount:</strong> ${promoDiscount}% off`;
 
-            const newPrice = data.newPrice;
-            console.log("New Price:", newPrice); // Log newPrice to verify
+                    // Update the global variables for promo discount and new price
+                    updatedPromoDiscount = promoDiscount;
+                    updatedFinalPrice = data.newPrice;
 
-            const finalPriceElement = document.querySelector('.final-price');
-            if (finalPriceElement && typeof newPrice === 'number' && newPrice > 0) {
-                finalPriceElement.innerHTML = `<strong>Final Price:</strong> $${newPrice.toFixed(2)}`;
-            } else {
-                console.error("Invalid price returned from server:", newPrice);
-                alert("Failed to update final price.");
+                    const finalPriceElement = document.querySelector('.final-price');
+                    if (finalPriceElement && typeof updatedFinalPrice === 'number' && updatedFinalPrice >= 0) {
+                        finalPriceElement.innerHTML = `<strong>Final Price:</strong> $${updatedFinalPrice.toFixed(2)}`;
+                    } else {
+                        console.error("Invalid price returned from server:", updatedFinalPrice);
+                        alert("Failed to update final price.");
+                    }
+                } else {
+                    console.error("Promotion Discount element missing or invalid discount rate.");
+                    alert("Unable to apply promotion discount.");
+                }
             }
-        } else {
-            console.error("Promotion Discount element missing or invalid discount rate.");
-            alert("Unable to apply promotion discount.");
-        }
-    }
-})
+        })
         .catch(error => {
             console.error("Error applying promo code:", error);
             alert("Failed to apply promo code.");
@@ -223,30 +230,67 @@ function applyPromoCode() {
     }
 }
 
+// Confirm Payment functionality
+function confirmPayment() {
+    const reservationID = parseInt('{{.ReservationDetail.ID}}');
+    const finalPrice = updatedFinalPrice;
+    const userID = parseInt('{{.UserID}}');
+    const membershipDiscount = parseFloat('{{.MembershipDiscount}}');
+    const promoDiscount = updatedPromoDiscount;
+    const vehicleModel = '{{.ReservationDetail.VehicleInfo.Model}}';
+    const licensePlate = '{{.ReservationDetail.VehicleInfo.LicensePlate}}';
+    const startTime = '{{.ReservationDetail.StartTime}}';
+    const endTime = '{{.ReservationDetail.EndTime}}';
 
+    // Correctly format the start and end times
+    const formattedStartTime = String(startTime).replace('T', ' ');
+    const formattedEndTime = String(endTime).replace('T', ' ');
 
-
- // Confirm Payment functionality
- function confirmPayment() {
-            const reservationID = '{{.ReservationDetail.ID}}'; // From template
-            const finalPrice = parseFloat('{{.FinalPrice}}'); // Final price after discounts
-
-            fetch(`http://localhost:8080/confirm-payment/${reservationID}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ finalPrice }),
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    alert("Payment confirmed and invoice sent!");
-                    window.location.href = '/confirmation'; // Navigate to confirmation page
-                } else {
-                    alert(data.error);
-                }
-            })
-            .catch(error => alert("Failed to confirm payment."));
+    // First, update the reservation status
+    fetch(`http://localhost:8080/reservation/update/${reservationID}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reservationID })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Error updating reservation: ' + response.statusText);
         }
+        return response.json();
+    })
+    .then(() => {
+        console.log("Formatted Start Time:", formattedStartTime, "Formatted End Time:", formattedEndTime);
+
+        // After updating the reservation, create the invoice
+        const invoice = {
+            user_id: userID,
+            reservation_id: reservationID,
+            membership_discount: membershipDiscount,
+            promo_discount: promoDiscount,
+            final_amount: finalPrice,
+            invoice_date: new Date().toISOString(),
+            vehicle_model: vehicleModel,
+            license_plate: licensePlate,
+            start_time: formattedStartTime,
+            end_time: formattedEndTime,
+        };
+
+        return fetch(`http://localhost:8080/create/invoice/${reservationID}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(invoice)
+        });
+    })
+    .then(() => {
+        alert("Payment confirmed and invoice sent!");
+        window.location.href = '/confirmation';
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert("Failed to confirm payment.");
+    });
+}
+
 
     </script>
 </body>

@@ -98,9 +98,14 @@ CREATE TABLE invoices (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     status ENUM('paid') DEFAULT 'paid',
     invoice_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    vehicle_model VARCHAR(50),
+    license_plate VARCHAR(20) unique not null,
+    start_time DATETIME,
+    end_time DATETIME,
     FOREIGN KEY (user_id) REFERENCES user_service_db.users(id),
     FOREIGN KEY (reservation_id) REFERENCES reservation_service_db.reservations(id)
 );
+
 
 
 CREATE DATABASE promotion_service_db;

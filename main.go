@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -212,23 +213,28 @@ func isValidPassword(password string) bool {
 	return len(password) >= 8 // Add more complexity checks if needed
 }
 
-// register form
+// registerHandler handles both GET and POST requests for the registration form
 func registerHandler(w http.ResponseWriter, r *http.Request) {
+	// If the method is GET, serve the registration page with no error message
 	if r.Method == http.MethodGet {
-		// Serve login page with an empty error message
+		// Parse the registration template
 		tmpl, err := template.ParseFiles("register.html")
 		if err != nil {
+			// If there is an error in parsing, log the error and return an internal server error
 			log.Printf("Template parsing error: %v\n", err)
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
+		// Serve the registration page with an empty error message
 		tmpl.Execute(w, struct {
 			ErrorMessage string
 		}{ErrorMessage: ""})
 		return
 	}
+
+	// If the method is POST, handle form submission
 	if r.Method == http.MethodPost {
-		// Parse form data
+		// Parse the form values
 		username := r.FormValue("username")
 		email := r.FormValue("email")
 		password := r.FormValue("password")
@@ -238,7 +244,7 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 		var existingUsername string
 		err := userdb.QueryRow("SELECT username FROM users WHERE username = ?", username).Scan(&existingUsername)
 		if err != sql.ErrNoRows {
-			// If the username exists, send an error message
+			// If the username exists, send an error message to the template
 			tmpl, err := template.ParseFiles("register.html")
 			if err != nil {
 				log.Printf("Template parsing error: %v\n", err)
@@ -251,11 +257,12 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 			}{ErrorMessage: "Username is already taken. Please try another one."})
 			return
 		}
+
 		// Check if the email already exists in the database
 		var existingEmail string
 		err = userdb.QueryRow("SELECT email FROM users WHERE email = ?", email).Scan(&existingEmail)
 		if err != sql.ErrNoRows {
-			// If the email exists, send an error message
+			// If the email exists, send an error message to the template
 			tmpl, err := template.ParseFiles("register.html")
 			if err != nil {
 				log.Printf("Template parsing error: %v\n", err)
@@ -268,103 +275,119 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 			}{ErrorMessage: "Email is already in use. Please try another one."})
 			return
 		} else if !isValidEmail(email) {
+			// If the email format is invalid, throw an error message
 			http.Error(w, "Invalid email format", http.StatusBadRequest)
-			// If the email is not valid (e.g. incorrect format) throw an error message
+			// Render the registration page with an error message for invalid email format
 			tmpl, err := template.ParseFiles("register.html")
 			if err != nil {
 				log.Printf("Template parsing error: %v\n", err)
 				http.Error(w, "Internal server error.", http.StatusInternalServerError)
 				return
 			}
-			// Pass error message to the template
 			tmpl.Execute(w, struct {
 				ErrorMessage string
 			}{ErrorMessage: "Invalid email format."})
 			return
 		}
-		//if password is not 8 characters or more, throw an error message
+
+		// Check if the password meets the required length (8 characters or more)
 		if !isValidPassword(password) {
+			// If the password is too short, return an error message
 			http.Error(w, "Password needs to be at least 8 characters long", http.StatusBadRequest)
-			// If the email is not valid (e.g. incorrect format) throw an error message
+			// Render the registration page with an error message for password length
 			tmpl, err := template.ParseFiles("register.html")
 			if err != nil {
 				log.Printf("Template parsing error: %v\n", err)
 				http.Error(w, "Internal server error.", http.StatusInternalServerError)
 				return
 			}
-			// Pass error message to the template
 			tmpl.Execute(w, struct {
 				ErrorMessage string
 			}{ErrorMessage: "Password needs to be at least 8 characters long."})
 			return
 		}
-		// Hash the password
+
+		// Hash the password before storing it in the database for security
 		passwordHash := hashPassword(password)
 		log.Println("Password hashed successfully")
+
+		// Generate a unique verification token for email verification
 		verificationToken := generateVerificationToken()
 		log.Printf("Generated verification token: %s", verificationToken)
 
-		// Insert into the database
+		// Insert the user details into the database (username, email, hashed password, and verification token)
 		_, err = userdb.Exec("INSERT INTO users (username, email, password_hash, verification_token) VALUES (?, ?, ?, ?)",
 			username, email, passwordHash, verificationToken)
 		if err != nil {
+			// If there's an error inserting into the database, return an error response
 			http.Error(w, "Failed to register user. Please try again.", http.StatusInternalServerError)
 			log.Printf("Error inserting user: %v\n", err)
 			return
 		}
-		sendVerificationEmail(email, verificationToken) // Send the verification email
 
-		// Registration successful
+		// Send a verification email to the user with the verification token
+		sendVerificationEmail(email, verificationToken)
+
+		// Registration is successful, inform the user and prompt them to check their email for verification
 		fmt.Fprintln(w, "Registration successful! Please check your email to verify your account.")
 	}
 }
 
-// login form
+// loginHandler handles both GET and POST requests for the login form
 func loginHandler(w http.ResponseWriter, r *http.Request) {
+	// If the method is GET, serve the login page with an empty error message
 	if r.Method == http.MethodGet {
-		// Serve login page with an empty error message
+		// Parse the login template
 		tmpl, err := template.ParseFiles("login.html")
 		if err != nil {
+			// If there is an error in parsing, log the error and return an internal server error
 			log.Printf("Template parsing error: %v\n", err)
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
+		// Serve the login page with an empty error message
 		tmpl.Execute(w, struct {
 			ErrorMessage string
 		}{ErrorMessage: ""})
 		return
 	}
 
+	// If the method is POST, handle form submission
 	if r.Method == http.MethodPost {
-		// Retrieve user input
+		// Retrieve user input (email and password) from the form
 		email := r.FormValue("email")
 		password := r.FormValue("password")
 
-		// Hash user password
+		// Hash the user-provided password for comparison with the stored hash
 		passwordHash := hashPassword(password)
 
-		// Retrieve user info from database
+		// Declare variables to store user information retrieved from the database
 		var username string
 		var membershipTierID, userId int
 		var storedPasswordHash string
 		var isVerified bool
 
+		// Query the database to retrieve the user data based on the provided email
 		err := userdb.QueryRow("SELECT id, username, membership_tier_id, password_hash, is_verified FROM users WHERE email = ?", email).
 			Scan(&userId, &username, &membershipTierID, &storedPasswordHash, &isVerified)
 
+		// If no user is found or if the password hashes do not match, send an error message
 		if err == sql.ErrNoRows || passwordHash != storedPasswordHash {
-			// If user does not exist or password does not match
+			// Parse the login template again and display an error message
 			tmpl, err := template.ParseFiles("login.html")
 			if err != nil {
 				log.Printf("Template parsing error: %v\n", err)
 				http.Error(w, "Internal server error.", http.StatusInternalServerError)
 				return
 			}
+			// Pass error message to the template (invalid email or password)
 			tmpl.Execute(w, struct {
 				ErrorMessage string
 			}{ErrorMessage: "Invalid email or password"})
 			return
 		}
+
+		// If the user is not verified, show an error message to verify the email first
 		if !isVerified {
 			tmpl, err := template.ParseFiles("login.html")
 			if err != nil {
@@ -372,66 +395,81 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Internal server error.", http.StatusInternalServerError)
 				return
 			}
+			// Pass error message to the template (email not verified)
 			tmpl.Execute(w, struct {
 				ErrorMessage string
 			}{ErrorMessage: "Please verify your email first."})
 			return
 		} else if err != nil {
-			// Database error
+			// If there is a database error (other than no rows found), log and send internal server error
 			log.Printf("Database error: %v\n", err)
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
-		//save user details in session
+
+		// If login is successful, save user details in the session
 		session, _ := store.Get(r, "user-session")
-		session.Values["username"] = username
-		session.Values["loggedIn"] = true
-		session.Values["membershipTier"] = membershipTierID
-		session.Values["UserID"] = userId
-		// Debug log to verify session values
+		session.Values["username"] = username               // Store the username in the session
+		session.Values["loggedIn"] = true                   // Mark the user as logged in
+		session.Values["membershipTier"] = membershipTierID // Store the user's membership tier ID
+		session.Values["UserID"] = userId                   // Store the user's ID in the session
+
+		// Debug log to verify the session values after login
 		log.Printf("Session values after login: %v", session.Values)
 
+		// Save the session data
 		err = session.Save(r, w)
 		if err != nil {
+			// If there is an error saving the session, log and return internal server error
 			log.Printf("Error saving session: %v", err)
 			http.Error(w, "Failed to save session", http.StatusInternalServerError)
 			return
 		}
 
-		// Login successful
+		// Log the successful login event
 		log.Printf("User logged in: %s with Membership Tier ID: %d and user id: %d \n", username, membershipTierID, userId)
-		http.Redirect(w, r, "/home", http.StatusSeeOther) // Redirect to homepage or dashboard
+
+		// Redirect the user to the homepage or dashboard after successful login
+		http.Redirect(w, r, "/home", http.StatusSeeOther)
 	}
 }
 
-// renders the home page
+// homeHandler renders the home page after verifying if the user is logged in
 func homeHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session data
 	session, _ := store.Get(r, "user-session")
 	log.Printf("Session values after login: %v", session.Values)
-	//check if user is logged in
+
+	// Check if the user is logged in
 	loggedIn, _ := session.Values["loggedIn"].(bool)
 	username, _ := session.Values["username"].(string)
 
+	// If user is not logged in, redirect to login page
 	if !loggedIn {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	//retrieve user's memmbersip tier
+
+	// Retrieve the user's membership tier from the database
 	var membershipTier string
 	err := userdb.QueryRow("SELECT membership_tiers.name FROM users INNER JOIN membership_tiers ON users.membership_tier_id = membership_tiers.id WHERE users.username = ?", username).Scan(&membershipTier)
 	if err != nil {
+		// If there's an error retrieving the membership tier, log it and return an internal server error
 		log.Printf("Error retrieving membership tier: %v\n", err)
 		http.Error(w, "Internal server error.", http.StatusInternalServerError)
 		return
 	}
 
+	// Parse and render the home page template
 	tmpl, err := template.ParseFiles("home.html")
 	if err != nil {
+		// If there is an error parsing the template, log it and return an internal server error
 		log.Printf("Template parsing error: %v\n", err)
 		http.Error(w, "Internal server error.", http.StatusInternalServerError)
 		return
 	}
 
+	// Execute the template with user data (login status, username, and membership tier)
 	tmpl.Execute(w, struct {
 		isLoggedIn     bool
 		Username       string
@@ -441,43 +479,52 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		Username:       username,
 		MembershipTier: membershipTier,
 	})
+
+	// Send a success message as a JSON response (for any possible API integration)
 	response := struct {
 		Message string `json:"message"`
 	}{"Login successful"}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
-
 }
 
-// profile page
+// profileHandler handles the user's profile page (view and update)
 func profileHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session data
 	session, _ := store.Get(r, "user-session")
 	log.Printf("Session values after login: %v", session.Values)
 	loggedIn, _ := session.Values["loggedIn"].(bool)
 	username, _ := session.Values["username"].(string)
 
+	// If the user is not logged in, redirect to login page
 	if !loggedIn {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 
+	// Handle GET request: Fetch and display the current profile details
 	if r.Method == http.MethodGet {
-		//fetch user details
+		// Fetch user details (email and membership tier) from the database
 		var email, membershipTier string
 		err := userdb.QueryRow("select email, (select name from membership_tiers where id = membership_tier_id) as membership_tier from users where username = ?", username).Scan(&email, &membershipTier)
 		if err != nil {
+			// If there is an error fetching user details, log and return an internal server error
 			log.Printf("Error fetching user details: %v", err)
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
-		// Render the profile page
+
+		// Parse and render the profile page template
 		tmpl, err := template.ParseFiles("profile.html")
 		if err != nil {
+			// If there is an error parsing the template, log it and return an internal server error
 			log.Printf("Template parsing error: %v", err)
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
+
+		// Execute the template with current user data (username, email, membership tier)
 		tmpl.Execute(w, struct {
 			Username       string
 			Email          string
@@ -487,19 +534,22 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 			Username:       username,
 			Email:          email,
 			MembershipTier: membershipTier,
-			ErrorMessage:   "",
+			ErrorMessage:   "", // Empty error message for GET request
 		})
 	} else if r.Method == http.MethodPost {
-		//handle profile update
+		// Handle POST request: Process profile updates
+
+		// Retrieve the new user data from the form
 		newUsername := r.FormValue("username")
 		newEmail := r.FormValue("email")
 		newPassword := r.FormValue("password")
 
-		//check if new username is taken
+		// Check if the new username is already taken
 		if newUsername != username {
 			var existingId int
 			err := userdb.QueryRow("select id from users where username = ?", newUsername).Scan(&existingId)
 			if err == nil {
+				// If the username is already taken, render the profile page with an error message
 				tmpl, _ := template.ParseFiles("profile.html")
 				tmpl.Execute(w, struct {
 					Username       string
@@ -516,32 +566,37 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// Update the database
+		// Prepare the SQL query to update the user's profile
 		query := "UPDATE users SET username = ?, email = ?"
 		args := []interface{}{newUsername, newEmail}
 
+		// If a new password is provided, hash it and include it in the update query
 		if newPassword != "" {
 			passwordHash := hashPassword(newPassword)
 			query += ", password_hash = ?"
 			args = append(args, passwordHash)
 		}
 
+		// Add the condition to update the profile of the current user
 		query += " WHERE username = ?"
 		args = append(args, username)
 
+		// Execute the SQL query to update the user in the database
 		_, err := userdb.Exec(query, args...)
 		if err != nil {
+			// If there is an error updating the profile, log and return an internal server error
 			log.Printf("Error updating user profile: %v", err)
 			http.Error(w, "Failed to update profile. Please try again.", http.StatusInternalServerError)
 			return
 		}
-		// Update the session username
+
+		// If profile updated successfully, update the session with the new username
 		session.Values["username"] = newUsername
 		session.Save(r, w)
 
+		// Redirect to the profile page to display updated information
 		http.Redirect(w, r, "/profile", http.StatusSeeOther)
 	}
-
 }
 
 // MembershipTier represents a membership tier
@@ -554,109 +609,139 @@ type MembershipTier struct {
 	IsCurrent    bool
 }
 
-// Handle upgrading the user's membership tier
+// upgradeMembershipHandler handles the user's membership tier upgrade request
 func upgradeMembershipHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session data
 	session, _ := store.Get(r, "user-session")
-	// Ensure the request is PUT
+
+	// Ensure the request method is PUT (updating data)
 	if r.Method != http.MethodPut {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	var userID int
-	// Get the membership tier ID from URL
-	membershipTierID := mux.Vars(r)["id"]
-	userID = session.Values["UserID"].(int) // Get the user ID from session
 
-	// Update the user's membership in the database
+	// Get the membership tier ID from the URL path variable
+	membershipTierID := mux.Vars(r)["id"]
+
+	// Get the user ID from the session
+	userID := session.Values["UserID"].(int)
+
+	// Update the user's membership tier in the database
 	_, err := userdb.Exec("UPDATE users SET membership_tier_id = ? WHERE id = ?", membershipTierID, userID)
 	if err != nil {
+		// If an error occurs while updating the membership tier, log the error and return a server error
 		http.Error(w, "Error upgrading membership", http.StatusInternalServerError)
 		log.Printf("Error updating membership: %v\n", err)
 		return
 	}
+
 	// Update the session with the new membership tier
 	session.Values["membershipTier"] = membershipTierID
 	session.Save(r, w)
 
-	// Respond with success message
+	// Respond with a success message in JSON format
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Membership upgraded successfully!",
 	})
 }
 
-// membershipHandler renders the membership page
+// membershipHandler renders the membership page where users can view and upgrade their membership tiers
 func membershipHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session data
 	session, _ := store.Get(r, "user-session")
 	loggedIn, _ := session.Values["loggedIn"].(bool)
 	username, _ := session.Values["username"].(string)
-	//check if user is logged in
+
+	// Check if the user is logged in, if not, redirect to login page
 	if !loggedIn {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
-	// Retrieve the session
+
+	// Retrieve the current membership tier from the session
 	membershipTier, _ := session.Values["membershipTier"].(int)
 
-	//fetch all membership tiers from database
-	rows, err := userdb.Query("select id, name, benefits, discount_rate,price from membership_tiers")
+	// Fetch all membership tiers from the database
+	rows, err := userdb.Query("SELECT id, name, benefits, discount_rate, price FROM membership_tiers")
 	if err != nil {
+		// If there's an error fetching membership tiers, log and return an internal server error
 		http.Error(w, "Error loading membership tiers", http.StatusInternalServerError)
 		log.Printf("Database error: %v\n", err)
 		return
 	}
 	defer rows.Close()
+
+	// Define a slice to store the membership tiers
 	var tiers []MembershipTier
+
+	// Loop through the rows and scan the data into the struct
 	for rows.Next() {
-		// retrieve membership tier information and store under a struct
 		var tier MembershipTier
 		err := rows.Scan(&tier.ID, &tier.Name, &tier.Benefits, &tier.DiscountRate, &tier.Price)
 		if err != nil {
+			// If an error occurs while reading the membership tier data, log and return an internal server error
 			http.Error(w, "Error reading membership tiers", http.StatusInternalServerError)
 			log.Printf("Database error: %v\n", err)
 			return
 		}
-		// Mark the user's current membership
+		// Mark the user's current membership tier for easier identification in the UI
 		tier.IsCurrent = (tier.ID == membershipTier)
+		// Append the tier to the tiers slice
 		tiers = append(tiers, tier)
 	}
-	//parse and render the html page for membership page
+
+	// Parse the membership page template
 	tmpl, err := template.ParseFiles("membership.html")
 	if err != nil {
+		// If there's an error parsing the template, log and return an internal server error
 		http.Error(w, "Error loading page", http.StatusInternalServerError)
 		log.Printf("Template error: %v\n", err)
 		return
 	}
 
+	// Execute the template with the username and membership tiers data
 	err = tmpl.Execute(w, struct {
 		Username string
 		Tiers    []MembershipTier
-	}{Username: username,
-		Tiers: tiers})
+	}{
+		Username: username,
+		Tiers:    tiers,
+	})
 	if err != nil {
+		// If there's an error rendering the page, log and return an internal server error
 		http.Error(w, "Error rendering page", http.StatusInternalServerError)
 		log.Printf("Template rendering error: %v\n", err)
 	}
 }
 
+// logoutHandler logs the user out by clearing the session and redirecting to the login page
 func logoutHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session data
 	session, _ := store.Get(r, "user-session")
-	// Clear session
+
+	// Clear the session values (logout the user)
 	session.Values["loggedIn"] = false
 	session.Values["username"] = nil
 	session.Values["UserID"] = nil
+
+	// Save the session changes
 	session.Save(r, w)
+
+	// Redirect the user to the login page after logging out
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
-// view available vehicles in real-time
+// / availableVehiclesHandler handles the request to view available vehicles in real-time
 func availableVehiclesHandler(w http.ResponseWriter, r *http.Request) {
+	// Ensure the request method is GET (fetching data)
 	if r.Method != http.MethodGet {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	//query for available vehicles
-	rows, err := vehicledb.Query("select id, license_plate, model, location, hourly_rate from vehicles where status = 'available'")
+
+	// Query the database for vehicles with status 'available'
+	rows, err := vehicledb.Query("SELECT id, license_plate, model, location, hourly_rate FROM vehicles WHERE status = 'available'")
 	if err != nil {
 		http.Error(w, "Failed to retrieve available vehicles", http.StatusInternalServerError)
 		log.Printf("Database query error: %v\n", err)
@@ -664,8 +749,10 @@ func availableVehiclesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	// Create a slice to store vehicle data
 	var vehicles []Vehicle
-	//store vehicle data as a struct
+
+	// Loop through the rows and scan each vehicle's data into the struct
 	for rows.Next() {
 		var vehicle Vehicle
 		err := rows.Scan(&vehicle.ID, &vehicle.LicensePlate, &vehicle.Model, &vehicle.Location, &vehicle.HourlyRate)
@@ -674,25 +761,28 @@ func availableVehiclesHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Row scan error: %v\n", err)
 			return
 		}
+		// Append each vehicle to the vehicles slice
 		vehicles = append(vehicles, vehicle)
 	}
-	//respond with available vehicles in JSON format
+
+	// Respond with the available vehicles in JSON format
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(vehicles)
 	if err != nil {
 		http.Error(w, "Error encoding JSON response", http.StatusInternalServerError)
 		log.Printf("JSON encoding error: %v\n", err)
 	}
-
 }
 
-// reservation service: get available vehicles (Get/reservations/vehicle)
+// availableReservationsHandler retrieves the available vehicles from the vehicle service and returns them
 func availableReservationsHandler(w http.ResponseWriter, r *http.Request) {
+	// Ensure the request method is GET
 	if r.Method != http.MethodGet {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	//call vehicle service to get available vehicles
+
+	// Call the vehicle service to fetch available vehicles
 	resp, err := http.Get("http://localhost:8081/vehicles/available")
 	if err != nil {
 		http.Error(w, "Error contacting Vehicle Service", http.StatusInternalServerError)
@@ -701,6 +791,7 @@ func availableReservationsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	// Decode the response body from the vehicle service into a slice of vehicles
 	var vehicles []Vehicle
 	err = json.NewDecoder(resp.Body).Decode(&vehicles)
 	if err != nil {
@@ -708,6 +799,7 @@ func availableReservationsHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error decoding response: %v\n", err)
 		return
 	}
+
 	// Respond with the available vehicles in JSON format
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(vehicles)
@@ -717,13 +809,15 @@ func availableReservationsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Reservation Service: Create Reservation and Reserve Vehicle (POST /reservations)
+// createReservationHandler handles creating a new reservation and reserving a vehicle
 func createReservationHandler(w http.ResponseWriter, r *http.Request) {
+	// Ensure the request method is POST
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	// struct to represent reservation
+
+	// Define a struct to represent the reservation data from the request body
 	var reservation struct {
 		UserID     int     `json:"user_id"`
 		VehicleID  int     `json:"vehicle_id"`
@@ -739,17 +833,18 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error decoding request body: %v\n", err)
 		return
 	}
-	// Create reservation in the Reservation Service database
+
+	// Insert the reservation data into the reservation database
 	_, err = reservationdb.Exec("INSERT INTO reservations (user_id, vehicle_id, start_time, end_time, total_price) VALUES (?, ?, ?, ?, ?)",
 		reservation.UserID, reservation.VehicleID, reservation.StartTime, reservation.EndTime, reservation.TotalPrice)
 	if err != nil {
 		http.Error(w, "Error creating reservation", http.StatusInternalServerError)
 		log.Printf("Received reservation data: %+v\n", reservation)
-
 		log.Printf("Error inserting reservation into database: %v\n", err)
 		return
 	}
-	// Update reservation status to 'active'
+
+	// Update the reservation status to 'active' in the database
 	_, err = reservationdb.Exec("UPDATE reservations SET status = 'active' WHERE vehicle_id = ? AND user_id = ? AND start_time = ?",
 		reservation.VehicleID, reservation.UserID, reservation.StartTime)
 	if err != nil {
@@ -758,7 +853,7 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Call Vehicle Service to reserve the vehicle (update its status)
+	// Call the Vehicle Service to update the vehicle's status to 'reserved'
 	vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/reserve/%d", reservation.VehicleID)
 	resp, err := http.Post(vehicleServiceURL, "application/json", nil)
 	if err != nil {
@@ -766,7 +861,9 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error reserving vehicle", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Vehicle Service Response: %v\n", resp.StatusCode) //log the status code of the response
+	log.Printf("Vehicle Service Response: %v\n", resp.StatusCode) // Log the status code of the response
+
+	// If the Vehicle Service response is not OK, return an error
 	if resp.StatusCode != http.StatusOK {
 		http.Error(w, "Error reserving vehicle", http.StatusInternalServerError)
 		return
@@ -779,16 +876,17 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Vehicle Service: Reserve Vehicle (POST /vehicles/reserve/{vehicle_id})
+// reserveVehicleHandler handles the request to reserve a vehicle in the Vehicle Service
 func reserveVehicleHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session data
 	session, err := store.Get(r, "user-session")
 	log.Printf("Session values: %v", session.Values)
 
-	log.Println("About to handle vehicle reservation")
-	// Extract vehicle ID from the URL path
+	// Extract the vehicle ID from the URL path
 	vehicleID := mux.Vars(r)["vehicle_id"]
 	log.Printf("Vehicle ID from URL: %s", vehicleID)
-	// Update the vehicle status in the Vehicle Service database
+
+	// Update the vehicle's status to 'reserved' in the database
 	_, err = vehicledb.Exec("UPDATE vehicles SET status = 'reserved' WHERE id = ?", vehicleID)
 	if err != nil {
 		http.Error(w, "Error updating vehicle status", http.StatusInternalServerError)
@@ -796,19 +894,22 @@ func reserveVehicleHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Printf("Vehicle ID %s status updated to 'reserved'", vehicleID)
-	// Respond with a success message
+
+	// Respond with a success message indicating the vehicle is reserved
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "Vehicle successfully reserved.",
 	})
 }
 
-// availableVehiclesPageHandler serves the Available Vehicles page
+// VehiclesPageHandler serves the Available Vehicles page
 func VehiclesPageHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session and check if the user is logged in
 	session, _ := store.Get(r, "user-session")
 	loggedIn, _ := session.Values["loggedIn"].(bool)
 	userID, _ := session.Values["UserID"].(int)
 
+	// If the user is not logged in, redirect to the login page
 	if !loggedIn {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
@@ -817,22 +918,25 @@ func VehiclesPageHandler(w http.ResponseWriter, r *http.Request) {
 	// Serve the HTML page for available vehicles
 	tmpl, err := template.ParseFiles("availableVehicles.html")
 	if err != nil {
+		// If there is an error loading the template, send an internal server error
 		http.Error(w, "Error loading template", http.StatusInternalServerError)
 		log.Printf("Template parsing error: %v", err)
 		return
 	}
 
-	// Pass the user ID to the template
+	// Pass the user ID to the template for dynamic rendering
 	tmpl.Execute(w, map[string]interface{}{
 		"UserID": userID,
 	})
 	log.Printf("user id: %d \n", userID)
 }
 
-// retrieve vehicle information to display reservation details
+// getVehicleDetailsHandler retrieves and returns details of a specific vehicle based on its ID
 func getVehicleDetailsHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract the vehicle ID from the URL parameters
 	vehicleID := mux.Vars(r)["vehicle_id"]
 
+	// Define a struct to hold the vehicle details
 	var vehicle struct {
 		ID           int     `json:"id"`
 		LicensePlate string  `json:"license_plate"`
@@ -842,38 +946,44 @@ func getVehicleDetailsHandler(w http.ResponseWriter, r *http.Request) {
 		HourlyRate   float64 `json:"hourly_rate"`
 	}
 
+	// Query the database for the vehicle details
 	err := vehicledb.QueryRow(
 		"SELECT id, license_plate, model, status, location, hourly_rate FROM vehicles WHERE id = ?",
 		vehicleID,
 	).Scan(&vehicle.ID, &vehicle.LicensePlate, &vehicle.Model, &vehicle.Status, &vehicle.Location, &vehicle.HourlyRate)
 
 	if err != nil {
+		// If no rows are found, return a 404 error
 		if err == sql.ErrNoRows {
 			http.Error(w, "Vehicle not found", http.StatusNotFound)
 		} else {
+			// Handle other errors as internal server errors
 			http.Error(w, "Error fetching vehicle details", http.StatusInternalServerError)
 			log.Printf("Error querying vehicle: %v\n", err)
 		}
 		return
 	}
 
+	// Send the vehicle details as a JSON response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(vehicle)
 }
 
-// Handler to get reservations
+// getReservationsHandler retrieves the active reservations for the logged-in user
 func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session and check if the user is logged in
 	session, _ := store.Get(r, "user-session")
 	log.Printf("Session values after login: %v", session.Values)
 	loggedIn, _ := session.Values["loggedIn"].(bool)
 	userID, _ := session.Values["UserID"].(int)
 
+	// If the user is not logged in, redirect to the login page
 	if !loggedIn {
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 		return
 	}
 
-	// Fetch reservations for the user
+	// Query the database for active reservations for the logged-in user
 	rows, err := reservationdb.Query("SELECT id, vehicle_id, start_time, end_time, total_price, status FROM reservations WHERE user_id = ? and status = 'active'", userID)
 	if err != nil {
 		http.Error(w, "Error fetching reservations", http.StatusInternalServerError)
@@ -882,6 +992,7 @@ func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
+	// Define a slice to hold the reservations
 	var reservations []struct {
 		ID          int     `json:"id"`
 		VehicleID   int     `json:"vehicle_id"`
@@ -898,7 +1009,7 @@ func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
 		} `json:"vehicle_info"`
 	}
 
-	// Loop through each reservation
+	// Loop through each reservation and fetch the vehicle details
 	for rows.Next() {
 		var reservation struct {
 			ID          int     `json:"id"`
@@ -916,7 +1027,7 @@ func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
 			} `json:"vehicle_info"`
 		}
 
-		// Scan reservation data
+		// Scan reservation data from the database
 		err := rows.Scan(&reservation.ID, &reservation.VehicleID, &reservation.StartTime, &reservation.EndTime, &reservation.TotalPrice, &reservation.Status)
 		if err != nil {
 			http.Error(w, "Error scanning reservations", http.StatusInternalServerError)
@@ -924,7 +1035,7 @@ func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Fetch vehicle details from Vehicle Service (assuming vehicle info is available through API)
+		// Fetch vehicle details from Vehicle Service
 		vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/%d", reservation.VehicleID)
 		resp, err := http.Get(vehicleServiceURL)
 		if err != nil || resp.StatusCode != http.StatusOK {
@@ -932,7 +1043,7 @@ func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		// Decode vehicle details
+		// Decode the vehicle details
 		err = json.NewDecoder(resp.Body).Decode(&reservation.VehicleInfo)
 		if err != nil {
 			log.Printf("Error decoding vehicle details: %v\n", err)
@@ -958,7 +1069,7 @@ func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Check if the modification is allowed (e.g., within 1 hour before the reservation start time)
+// isModificationAllowed checks if the modification is allowed based on the time policy
 func isModificationAllowed(reservationID string) bool {
 	// Get the reservation start time from the database
 	var startTime string
@@ -979,23 +1090,16 @@ func isModificationAllowed(reservationID string) bool {
 	// Get the current time
 	currentTime := time.Now()
 
-	// Ensure the current time is in the same timezone as reservationStartTime (set both times to UTC or local)
-	// Ensure the current time is in the same timezone as reservationStartTime
-	if reservationStartTime.Sub(currentTime) <= 1*time.Hour {
-		return false // reservation is not allowed within 1 hour of the start time
-	}
-
-	// Check if the current time is within 1 hour of the reservation start time
+	// Ensure modification is allowed only if the start time is more than 1 hour away
 	if reservationStartTime.Sub(currentTime) <= 1*time.Hour {
 		log.Printf("Modification not allowed: current time (%v) is within 1 hour of reservation start time (%v)\n", currentTime, reservationStartTime)
-		return false // Modification is not allowed within 1 hour of the start time
+		return false // Reservation cannot be modified within 1 hour of start time
 	}
 
-	log.Printf("Current Time: %v, Reservation Start Time: %v", currentTime, reservationStartTime)
-	return true // Reservation can be modified if it's more than 1 hour before the start time
+	return true // Reservation can be modified if more than 1 hour before start time
 }
 
-// update reservation in the database based on user input
+// updateReservationHandler handles updating the reservation
 func updateReservationHandler(w http.ResponseWriter, r *http.Request) {
 	// Ensure the request is PUT
 	if r.Method != http.MethodPut {
@@ -1025,7 +1129,7 @@ func updateReservationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse the start time and end time
+	// Parse start and end times
 	startTime, err := time.Parse("2006-01-02 15:04:05", reservation.StartTime)
 	if err != nil {
 		http.Error(w, "Invalid start time format", http.StatusBadRequest)
@@ -1052,14 +1156,16 @@ func updateReservationHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// updateVehicleAvailability updates vehicle status to available
+// updateVehicleAvailability updates the vehicle status to 'available'
 func updateVehicleAvailability(vehicleID int) error {
+	// Update the vehicle status to 'available' in the database
 	_, err := vehicledb.Exec("UPDATE vehicles SET status = 'available' WHERE id = ?", vehicleID)
 	return err
 }
 
-// isCancellationAllowed checks if cancellation is allowed based on the policy
+// isCancellationAllowed checks if cancellation is allowed based on the time policy
 func isCancellationAllowed(reservationID string) bool {
+	// Get the reservation start time from the database
 	var startTime string
 	query := "SELECT start_time FROM reservations WHERE id = ?"
 	err := reservationdb.QueryRow(query, reservationID).Scan(&startTime)
@@ -1078,24 +1184,26 @@ func isCancellationAllowed(reservationID string) bool {
 	// Get the current time
 	currentTime := time.Now()
 
-	// Ensure the current time is in the same timezone as reservationStartTime
+	// Ensure cancellation is allowed only if more than 1 hour before the reservation start time
 	if reservationStartTime.Sub(currentTime) <= 1*time.Hour {
-		return false // Cancellation is not allowed within 1 hour of the start time
+		return false // Cancellation not allowed within 1 hour of start time
 	}
-	log.Printf("Current Time: %v, Reservation Start Time: %v", currentTime, reservationStartTime)
 
-	return true // Cancellation is allowed if it's more than 1 hour before the start time
+	return true // Cancellation is allowed if more than 1 hour before start time
 }
 
-// Cancel Reservation Handler with Policies
+// cancelReservationHandler handles the cancellation of a reservation
 func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
+	// Ensure the request is DELETE
 	if r.Method != http.MethodDelete {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
+
+	// Get reservation ID from URL
 	reservationID := mux.Vars(r)["id"]
 
-	// Check if the cancellation is allowed (e.g., within 1 hour1 before the reservation start time)
+	// Check if cancellation is allowed based on the time policy
 	if !isCancellationAllowed(reservationID) {
 		http.Error(w, "Cancellation not allowed within 1 hour of start time", http.StatusBadRequest)
 		return
@@ -1107,7 +1215,8 @@ func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error canceling reservation", http.StatusInternalServerError)
 		return
 	}
-	// Get vehicle ID associated with the reservation
+
+	// Get the vehicle ID associated with the canceled reservation
 	var vehicleID int
 	err = reservationdb.QueryRow("SELECT vehicle_id FROM reservations WHERE id = ?", reservationID).Scan(&vehicleID)
 	if err != nil {
@@ -1121,6 +1230,7 @@ func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error updating vehicle availability", http.StatusInternalServerError)
 		return
 	}
+
 	// Send success response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -1130,7 +1240,6 @@ func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
 
 // getReservationDetails fetches reservation details and returns them as a struct
 func getReservationDetails(reservationID int) (Reservation, error) {
-
 	// Fetch reservation details from the database
 	rows, err := reservationdb.Query("SELECT id, vehicle_id, start_time, end_time, total_price, status FROM reservations WHERE id = ? and status = 'active'", reservationID)
 	if err != nil {
@@ -1140,38 +1249,39 @@ func getReservationDetails(reservationID int) (Reservation, error) {
 
 	var reservations Reservation
 	if rows.Next() {
-		// Scan reservation data
+		// Scan reservation data from the query result
 		err = rows.Scan(&reservations.ID, &reservations.VehicleID, &reservations.StartTime, &reservations.EndTime, &reservations.TotalPrice, &reservations.Status)
 		if err != nil {
 			return Reservation{}, fmt.Errorf("Error scanning reservations: %v", err)
 		}
 
-		// Fetch vehicle details from Vehicle Service (assuming vehicle info is available through API)
+		// Fetch vehicle details from Vehicle Service (assuming vehicle info is available via an API)
 		vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/%d", reservations.VehicleID)
 		resp, err := http.Get(vehicleServiceURL)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			return Reservation{}, fmt.Errorf("Error fetching vehicle details for vehicle_id %d: %v", reservations.VehicleID, err)
 		}
 
-		// Decode vehicle details
+		// Decode the vehicle details into the reservation object
 		err = json.NewDecoder(resp.Body).Decode(&reservations.VehicleInfo)
 		if err != nil {
 			return Reservation{}, fmt.Errorf("Error decoding vehicle details: %v", err)
 		}
 	} else {
-		// No reservation found
+		// Return error if no reservation is found for the given ID
 		return Reservation{}, fmt.Errorf("Reservation with ID %d not found", reservationID)
 	}
 
-	// Check for any error that occurred during iteration
+	// Check for any error that occurred during row iteration
 	if err := rows.Err(); err != nil {
 		return Reservation{}, fmt.Errorf("Error iterating over rows: %v", err)
 	}
 	return reservations, nil
 }
 
-// get discount rate
+// getMembershipDiscount retrieves the membership discount based on the user's session
 func getMembershipDiscount(w http.ResponseWriter, r *http.Request) {
+	// Retrieve session details
 	session, err := store.Get(r, "user-session")
 	if err != nil {
 		log.Printf("Error retrieving session: %v", err)
@@ -1186,15 +1296,15 @@ func getMembershipDiscount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("Session values before fetching membership discount: %v", session.Values)
-	log.Printf("Session values: %v", session.Values)
 	membershipTier, _ := session.Values["membershipTier"].(int)
 
-	//http get
+	// Ensure the correct HTTP method is used
 	if r.Method != http.MethodGet {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
-	//query for available vehicles
+
+	// Query to fetch membership discount details from the database
 	rows, err := userdb.Query("select name, discount_rate from membership_tiers where id = ?", membershipTier)
 	if err != nil {
 		http.Error(w, "Failed to retrieve membership details", http.StatusInternalServerError)
@@ -1202,6 +1312,7 @@ func getMembershipDiscount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rows.Close()
+
 	// Define a struct to hold membership data
 	type Membership struct {
 		Name         string  `json:"name"`
@@ -1210,7 +1321,7 @@ func getMembershipDiscount(w http.ResponseWriter, r *http.Request) {
 
 	var membership Membership
 
-	// Scan the query result into the struct
+	// Scan the query result into the membership struct
 	if rows.Next() {
 		err := rows.Scan(&membership.Name, &membership.DiscountRate)
 		if err != nil {
@@ -1219,6 +1330,7 @@ func getMembershipDiscount(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
+		// Return error if membership tier not found
 		http.Error(w, "Membership tier not found", http.StatusNotFound)
 		return
 	}
@@ -1230,28 +1342,28 @@ func getMembershipDiscount(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Error encoding JSON response", http.StatusInternalServerError)
 		log.Printf("JSON encoding error: %v\n", err)
 	}
-
 }
 
+// getMembershipDiscountRate retrieves the discount rate for the given membership tier ID
 func getMembershipDiscountRate(membershipTierID int, r *http.Request) (float64, string, error) {
 	// Construct the URL for the getMembershipDiscount API
 	url := fmt.Sprintf("http://localhost:8080/membership/discount/%d", membershipTierID)
 	log.Printf("Fetching membership discount from URL: %s", url)
 
-	// Create a new HTTP request
+	// Create a new HTTP request to fetch the discount
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return 0, "", fmt.Errorf("error creating request to get membership discount: %v", err)
 	}
 
-	// Copy the session cookie from the incoming request
+	// Copy session cookie from incoming request to the new request
 	cookie, err := r.Cookie("user-session")
 	if err != nil {
 		return 0, "", fmt.Errorf("session cookie missing: %v", err)
 	}
 	req.AddCookie(cookie)
 
-	// Make the HTTP request using an HTTP client
+	// Send the HTTP request to the external service
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -1259,25 +1371,24 @@ func getMembershipDiscountRate(membershipTierID int, r *http.Request) (float64, 
 	}
 	defer resp.Body.Close()
 
-	log.Printf("Response Status: %s", resp.Status)
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, "", fmt.Errorf("error reading response body: %v", err)
-	}
-
-	log.Printf("Response Body: %s", string(body)) // Log the full response body for debugging
-
-	// Check if the response is successful
+	// Check for successful response status
 	if resp.StatusCode != http.StatusOK {
 		return 0, "", fmt.Errorf("received non-OK response from getMembershipDiscount API: %v", resp.Status)
 	}
 
-	// Parse the response JSON to get the discount rate and name
+	// Read and log the response body for debugging
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, "", fmt.Errorf("error reading response body: %v", err)
+	}
+	log.Printf("Response Body: %s", string(body))
+
+	// Parse the response body into the membership struct
 	var membership struct {
 		Name         string  `json:"name"`
 		DiscountRate float64 `json:"discount_rate"`
 	}
-	err = json.Unmarshal(body, &membership) // Use json.Unmarshal instead of json.NewDecoder
+	err = json.Unmarshal(body, &membership)
 	if err != nil {
 		return 0, "", fmt.Errorf("error decoding membership discount response: %v", err)
 	}
@@ -1286,21 +1397,22 @@ func getMembershipDiscountRate(membershipTierID int, r *http.Request) (float64, 
 	return membership.DiscountRate, membership.Name, nil
 }
 
+// getPromoCodeDiscount fetches the discount details for the promo code from the database
 func getPromoCodeDiscount(w http.ResponseWriter, r *http.Request) {
 	promoCode := mux.Vars(r)["promoCode"]
 
-	// Query to get the promo code details
+	// Query to fetch promo code details from the database
 	var promo struct {
 		Code         string  `json:"code"`
 		DiscountRate float64 `json:"discount_rate"`
 		IsActive     bool    `json:"is_active"`
 	}
 
-	// Query to get promotion details
+	// Query to get promo details
 	query := "SELECT code, discount_rate, is_active FROM promotions WHERE code = ?"
 	err := promotiondb.QueryRow(query, promoCode).Scan(&promo.Code, &promo.DiscountRate, &promo.IsActive)
 
-	// Error handling if the promo code does not exist or any other query error occurs
+	// Error handling for missing or inactive promo codes
 	if err == sql.ErrNoRows {
 		http.Error(w, "Promo code not found", http.StatusNotFound)
 		return
@@ -1311,13 +1423,13 @@ func getPromoCodeDiscount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if promo is active
+	// Check if promo code is active
 	if !promo.IsActive {
-		http.Error(w, "Promo code is not active", http.StatusBadRequest)
+		http.Error(w, "Promo code is inactive", http.StatusBadRequest)
 		return
 	}
 
-	// Respond with the promo details as JSON
+	// Respond with the promo code details as JSON
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(promo); err != nil {
 		http.Error(w, "Error encoding promo code details", http.StatusInternalServerError)
@@ -1330,7 +1442,7 @@ func getPromoDiscount(promoCode string) (float64, error) {
 	// Construct the URL for the promotion service API
 	url := fmt.Sprintf("http://localhost:8080/promotion/discount/%s", promoCode)
 
-	// Send the HTTP GET request to the promotion service
+	// Send HTTP GET request to fetch the promo discount
 	resp, err := http.Get(url)
 	if err != nil {
 		return 0, fmt.Errorf("error making request to get promo code discount: %v", err)
@@ -1342,13 +1454,11 @@ func getPromoDiscount(promoCode string) (float64, error) {
 		return 0, fmt.Errorf("received non-OK response from promotion service: %v", resp.Status)
 	}
 
-	// Log the raw response body for debugging
+	// Log the raw response for debugging purposes
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return 0, fmt.Errorf("error reading response body: %v", err)
 	}
-
-	// Log the raw response (for debugging purposes)
 	log.Printf("Promo code response: %s", string(body))
 
 	// Parse the response JSON to get promo details
@@ -1363,20 +1473,21 @@ func getPromoDiscount(promoCode string) (float64, error) {
 	return promo.DiscountRate, nil
 }
 
+// applyPromoCode handles the application of a promo code and recalculates the final price.
 func applyPromoCode(w http.ResponseWriter, r *http.Request) {
-	// Ensure the request method is POST
+	// Ensure the request method is POST (promotions are applied via POST requests)
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
 
-	// Parse the request body to extract promo code
+	// Parse the request body to extract the promo code and current price
 	var promoReq struct {
-		PromoCode    string  `json:"promoCode"`    // Optional promo code
-		CurrentPrice float64 `json:"currentPrice"` // Ensure the client sends the current price
+		PromoCode    string  `json:"promoCode"`    // Promo code provided by the client (optional)
+		CurrentPrice float64 `json:"currentPrice"` // Current price of the reservation or product
 	}
 
-	// Decode the JSON body
+	// Decode the JSON body into the promoReq struct
 	err := json.NewDecoder(r.Body).Decode(&promoReq)
 	if err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -1388,7 +1499,7 @@ func applyPromoCode(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"success":  true,
-			"newPrice": promoReq.CurrentPrice, // Return the current price as is
+			"newPrice": promoReq.CurrentPrice, // Return the current price as is if no promo code
 		})
 		if err != nil {
 			http.Error(w, "Error encoding response", http.StatusInternalServerError)
@@ -1397,14 +1508,14 @@ func applyPromoCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Define the promotion struct
+	// Define the promotion struct to hold promo code details
 	type Promotion struct {
-		Code         string  `json:"code"`
-		DiscountRate float64 `json:"discount_rate"`
-		IsActive     bool    `json:"is_active"`
+		Code         string  `json:"code"`          // Promo code
+		DiscountRate float64 `json:"discount_rate"` // Discount percentage
+		IsActive     bool    `json:"is_active"`     // Whether the promo code is active or not
 	}
 
-	// Get promo details from the database
+	// Get promo details from the database using the provided promo code
 	promoCode := promoReq.PromoCode
 	var promo Promotion
 
@@ -1412,7 +1523,7 @@ func applyPromoCode(w http.ResponseWriter, r *http.Request) {
 	query := "SELECT code, discount_rate, is_active FROM promotions WHERE code = ?"
 	err = promotiondb.QueryRow(query, promoCode).Scan(&promo.Code, &promo.DiscountRate, &promo.IsActive)
 
-	// Check if promo code exists
+	// Handle cases where the promo code is not found
 	if err == sql.ErrNoRows {
 		http.Error(w, "Promo code not found", http.StatusNotFound)
 		return
@@ -1423,20 +1534,22 @@ func applyPromoCode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if promo code is active
+	// Check if the promo code is active, if not, return an error
 	if !promo.IsActive {
 		http.Error(w, "Promo code is inactive", http.StatusBadRequest)
 		return
 	}
 
-	// Calculate the new price based on the discount
+	// Validate the promo code's discount rate
 	if promo.DiscountRate < 0 || promo.DiscountRate > 100 {
 		http.Error(w, "Invalid promo code discount", http.StatusBadRequest)
 		return
 	}
-	//calculate new final price if user inputs promo code
+
+	// Calculate the new final price by applying the promo code discount
 	newPrice := promoReq.CurrentPrice * (1 - promo.DiscountRate/100)
 
+	// Validate the current price to ensure it's a positive value
 	if promoReq.CurrentPrice <= 0 {
 		http.Error(w, "Invalid current price", http.StatusBadRequest)
 		return
@@ -1446,8 +1559,8 @@ func applyPromoCode(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":      true,
-		"discountRate": promo.DiscountRate,
-		"newPrice":     newPrice,
+		"discountRate": promo.DiscountRate, // Return the applied discount rate
+		"newPrice":     newPrice,           // Return the new calculated price
 	})
 	if err != nil {
 		http.Error(w, "Error encoding promo response", http.StatusInternalServerError)
@@ -1456,7 +1569,9 @@ func applyPromoCode(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// billingPageHandler handles the rendering of the billing page.
 func billingPageHandler(w http.ResponseWriter, r *http.Request) {
+	// Retrieve the user session to access the logged-in user's data
 	session, err := store.Get(r, "user-session")
 	if err != nil {
 		log.Printf("Error retrieving session: %v", err)
@@ -1464,7 +1579,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("Session Values on Billing Page: %v", session.Values)
+	// Check if the user is logged in (verify the 'loggedIn' session key)
 	loggedIn, ok := session.Values["loggedIn"].(bool)
 	if !ok || !loggedIn {
 		log.Println("User not logged in or session key 'loggedIn' missing.")
@@ -1472,6 +1587,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Retrieve the user ID and membership tier from the session
 	userID, ok := session.Values["UserID"].(int)
 	if !ok {
 		log.Println("Session key 'UserID' missing or invalid type.")
@@ -1486,7 +1602,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract reservationID
+	// Extract reservationID from the URL query parameters
 	reservationIDStr := r.URL.Query().Get("reservationID")
 	if reservationIDStr == "" {
 		log.Println("Reservation ID is missing in query parameters.")
@@ -1494,6 +1610,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Convert reservation ID to an integer
 	reservationID, err := strconv.Atoi(reservationIDStr)
 	if err != nil {
 		log.Printf("Error converting reservation ID to integer: %v", err)
@@ -1503,7 +1620,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Fetching reservation details for Reservation ID: %d", reservationID)
 
-	// Fetch reservation details
+	// Fetch reservation details from the database
 	reservationDetails, err := getReservationDetails(reservationID)
 	if err != nil {
 		log.Printf("Error fetching reservation details: %v", err)
@@ -1513,7 +1630,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Reservation details: %+v", reservationDetails)
 
-	// Fetch membership discount
+	// Fetch membership discount for the user
 	membershipDiscount, membershipName, err := getMembershipDiscountRate(membershipTierID, r)
 	if err != nil {
 		log.Printf("Error fetching membership discount: %v", err)
@@ -1523,7 +1640,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Membership discount: %f, Membership name: %s", membershipDiscount, membershipName)
 
-	// Optional: Fetch promo code discount
+	// Optionally, fetch the promo code discount if provided in the URL query
 	promoCode := r.URL.Query().Get("promoCode")
 	var promoDiscount float64
 	if promoCode != "" {
@@ -1536,7 +1653,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Promo code discount: %f", promoDiscount)
 	}
 
-	// Ensure that discounts are valid (if they are zero or negative, set them to zero)
+	// Ensure that discounts are valid (set to zero if invalid)
 	if membershipDiscount < 0 || membershipDiscount > 100 {
 		membershipDiscount = 0
 	}
@@ -1544,18 +1661,18 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 		promoDiscount = 0
 	}
 
-	// Ensure TotalPrice is valid
+	// Ensure the reservation total price is valid
 	if reservationDetails.TotalPrice <= 0 {
 		http.Error(w, "Invalid reservation total price", http.StatusBadRequest)
 		return
 	}
 
-	// Calculate final price
+	// Calculate the final price after applying the membership and promo discounts
 	finalPrice := reservationDetails.TotalPrice * (1 - membershipDiscount/100)
 
 	log.Printf("Calculated Final Price: %f", finalPrice)
 
-	// Render billing template
+	// Render the billing page template
 	tmpl, err := template.ParseFiles("billing.html")
 	if err != nil {
 		log.Printf("Template parsing error: %v", err)
@@ -1563,14 +1680,16 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pass the relevant data to the template for rendering
 	err = tmpl.Execute(w, struct {
+		UserID             int
 		ReservationDetail  Reservation
 		FinalPrice         float64
 		PromoCode          string
 		MembershipDiscount float64
-		PromoDiscount      float64 // Add this
+		PromoDiscount      float64 // Include the promo discount in the template
 	}{
-
+		UserID:             userID,
 		ReservationDetail:  reservationDetails,
 		FinalPrice:         finalPrice,
 		PromoCode:          promoCode,
@@ -1578,6 +1697,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 		PromoDiscount:      promoDiscount, // Pass promo discount to template
 	})
 
+	// Handle errors if the template rendering fails
 	if err != nil {
 		log.Printf("Template rendering error: %v", err)
 		http.Error(w, "Error rendering template", http.StatusInternalServerError)
@@ -1587,7 +1707,7 @@ func billingPageHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Billing page successfully rendered for user ID: %d", userID)
 }
 
-// reservation Service: update reservation status (POST /reservation/update/{reservation_id})
+// reservation Service: update reservation status (PUT/reservation/update/{reservation_id}) and update vehicle status and insert invoice
 func ReservationStatusHandler(w http.ResponseWriter, r *http.Request) {
 	session, err := store.Get(r, "user-session")
 	log.Printf("Session values: %v", session.Values)
@@ -1597,13 +1717,30 @@ func ReservationStatusHandler(w http.ResponseWriter, r *http.Request) {
 	reservationID := mux.Vars(r)["reservationID"]
 	log.Printf("reservation ID from URL: %s", reservationID)
 	// Update the reservation status in the Reservation Service database
-	_, err = reservationdb.Exec("UPDATE reservation SET status = 'complete' WHERE id = ?", reservationID)
+	_, err = reservationdb.Exec("UPDATE reservations SET status = 'completed' WHERE id = ?", reservationID)
 	if err != nil {
 		http.Error(w, "Error updating reservation status", http.StatusInternalServerError)
 		log.Printf("Error updating reservation status in reservation Service: %v\n", err)
 		return
 	}
 	log.Printf("reservation ID %s status updated to 'complete'", reservationID)
+	// Get the vehicle ID associated with the canceled reservation
+	var vehicleID int
+	err = reservationdb.QueryRow("SELECT vehicle_id FROM reservations WHERE id = ?", reservationID).Scan(&vehicleID)
+	if err != nil || vehicleID == 0 {
+		http.Error(w, "Error fetching vehicle ID", http.StatusInternalServerError)
+		log.Printf("Error fetching vehicle ID for reservation %s: %v\n", reservationID, err)
+		return
+	}
+	//log the vehicle id when retrieving vehicle id from reservations
+	log.Printf("vehicle id: %d ", vehicleID)
+	// Update the vehicle availability to 'available'
+	err = updateVehicleStatus(vehicleID)
+	if err != nil {
+		http.Error(w, "Error updating vehicle availability", http.StatusInternalServerError)
+		return
+	}
+
 	// Respond with a success message
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
@@ -1611,59 +1748,183 @@ func ReservationStatusHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Vehicle Service: update vehicle status (POST /vehicles/update/{vehicle_id})
+// Function to update vehicle status via Vehicle Service API
+func updateVehicleStatus(vehicleID int) error {
+	client := &http.Client{}                            // HTTP client for making requests
+	reqBody := map[string]string{"status": "available"} // Request body for updating vehicle status
+	reqBodyJSON, _ := json.Marshal(reqBody)
+
+	// API endpoint of the Vehicle Service
+	url := fmt.Sprintf("http://localhost:8080/vehicles/%d/status", vehicleID)
+	log.Printf("Sending request to: %s", url) // Log the URL
+
+	// Create a new PUT request
+	req, err := http.NewRequest("PUT", url, bytes.NewBuffer(reqBodyJSON))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json") // Set content type as JSON
+
+	// Execute the HTTP request
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Check if the response status is OK
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("vehicle service responded with status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// Handler function to update the vehicle status
 func VehicleStatusHandler(w http.ResponseWriter, r *http.Request) {
-	session, err := store.Get(r, "user-session")
+	session, err := store.Get(r, "user-session") // Retrieve session information
 	log.Printf("Session values: %v", session.Values)
 
 	log.Println("About to update vehicle status")
 	// Extract vehicle ID from the URL path
-	vehicleID := mux.Vars(r)["vehicle_id"]
-	log.Printf("Vehicle ID from URL: %s", vehicleID)
-	// Update the vehicle status in the Vehicle Service database
+	vehicleIDStr := mux.Vars(r)["vehicle_id"]
+	if vehicleIDStr == "" {
+		http.Error(w, "Vehicle ID is required", http.StatusBadRequest)
+		log.Println("Vehicle ID is missing from URL")
+		return
+	}
+	log.Printf("Extracted Vehicle ID from URL: %s", vehicleIDStr)
+
+	// Convert the vehicle ID from string to integer
+	vehicleID, err := strconv.Atoi(vehicleIDStr)
+	if err != nil {
+		http.Error(w, "Invalid Vehicle ID", http.StatusBadRequest)
+		log.Printf("Invalid Vehicle ID: %s\n", vehicleIDStr)
+		return
+	}
+
+	// Update the vehicle status in the database
 	_, err = vehicledb.Exec("UPDATE vehicles SET status = 'available' WHERE id = ?", vehicleID)
 	if err != nil {
 		http.Error(w, "Error updating vehicle status", http.StatusInternalServerError)
 		log.Printf("Error updating vehicle status in Vehicle Service: %v\n", err)
 		return
 	}
-	log.Printf("Vehicle ID %s status updated to 'available'", vehicleID)
+	log.Printf("Vehicle ID %d status updated to 'available'", vehicleID)
+
 	// Respond with a success message
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Vehicle successfully reserved.",
+		"message": "Vehicle status updated successfully.",
 	})
 }
 
 // Invoice struct for sending JSON response
 type Invoice struct {
-	UserID             int     `json:"user_id"`
-	ReservationID      int     `json:"reservation_id"`
-	MembershipDiscount float64 `json:"membership_discount"`
-	PromoDiscount      float64 `json:"promo_discount"`
-	FinalAmount        float64 `json:"final_amount"`
-	InvoiceDate        string  `json:"invoice_date"`
+	UserID             int     `json:"user_id"`             // User ID associated with the invoice
+	ReservationID      int     `json:"reservation_id"`      // Reservation ID linked to the invoice
+	MembershipDiscount float64 `json:"membership_discount"` // Discount for membership tier
+	PromoDiscount      float64 `json:"promo_discount"`      // Discount from promotional codes
+	FinalAmount        float64 `json:"final_amount"`        // Final amount after applying discounts
+	InvoiceDate        string  `json:"invoice_date"`        // Date of the invoice creation
+	VehicleModel       string  `json:"vehicle_model"`       // Vehicle model for the reservation
+	LicensePlate       string  `json:"license_plate"`       // License plate of the vehicle
+	StartTime          string  `json:"start_time"`          // Reservation start time
+	EndTime            string  `json:"end_time"`            // Reservation end time
 }
 
-// Handler for creating an invoice
-func CreateInvoice(w http.ResponseWriter, r *http.Request) {
-	reservationID := mux.Vars(r)["reservationID"]
-	var invoice Invoice
+// Function to send an invoice creation request to the Billing Service API
+func createInvoiceStatus(reservationID int, userID int, membershipDiscount, promoDiscount, finalAmount float64, vehicleModel string, licensePlate string, start_time string, end_time string) error {
+	client := &http.Client{} // HTTP client for making requests
 
-	// For simplicity, we assume we get final amounts and discounts from the request (usually via request body or DB)
-	err := json.NewDecoder(r.Body).Decode(&invoice)
+	// Populate the Invoice struct
+	invoice := Invoice{
+		UserID:             userID,
+		ReservationID:      reservationID,
+		MembershipDiscount: membershipDiscount,
+		PromoDiscount:      promoDiscount,
+		FinalAmount:        finalAmount,
+		InvoiceDate:        time.Now().Format("2006-01-02 15:04:05"), // Current timestamp
+		VehicleModel:       vehicleModel,
+		LicensePlate:       licensePlate,
+		StartTime:          start_time,
+		EndTime:            end_time,
+	}
+
+	// Convert the invoice struct to JSON
+	reqBodyJSON, err := json.Marshal(invoice)
+	if err != nil {
+		return fmt.Errorf("error marshaling invoice: %v", err)
+	}
+
+	// API endpoint for creating an invoice
+	url := fmt.Sprintf("http://localhost:8080/create/invoice/%d", reservationID)
+	log.Printf("Sending invoice creation request to: %s", url)
+
+	// Create a new POST request
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqBodyJSON))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json") // Set content type as JSON
+
+	// Execute the HTTP request
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	// Check if the response status is OK
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("billing service responded with status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// Handler function for creating an invoice
+func CreateInvoice(w http.ResponseWriter, r *http.Request) {
+	var invoice Invoice
+	log.Println("Entered CreateInvoice handler")
+
+	// Read and log the request body
+	body, _ := io.ReadAll(r.Body)
+	log.Printf("Raw JSON body: %s\n", string(body))
+
+	// Decode the JSON into the Invoice struct
+	err := json.Unmarshal(body, &invoice)
 	if err != nil {
 		http.Error(w, "Error decoding invoice data", http.StatusBadRequest)
+		log.Printf("Error decoding invoice data: %v", err)
 		return
 	}
 
-	// Insert a new invoice record into the database
-	query := `INSERT INTO invoices (user_id, reservation_id, membership_discount, promo_discount, final_amount, invoice_date)
-              VALUES (?, ?, ?, ?, ?, ?)`
-	_, err = billingdb.Exec(query, invoice.UserID, reservationID, invoice.MembershipDiscount, invoice.PromoDiscount, invoice.FinalAmount, time.Now())
+	// Log the invoice object to verify
+	log.Printf("Invoice Received: %+v\n", invoice)
+
+	// Set the current timestamp for invoice_date
+	invoiceDate := time.Now().Format("2006-01-02 15:04:05")
+	log.Printf("Invoice Date: %s\n", invoiceDate)
+
+	// Insert the invoice into the database
+	_, err = billingdb.Exec(
+		`INSERT INTO invoices (user_id, reservation_id, membership_discount, promo_discount, final_amount, invoice_date, vehicle_model, license_plate, start_time, end_time) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		invoice.UserID,
+		invoice.ReservationID,
+		invoice.MembershipDiscount,
+		invoice.PromoDiscount,
+		invoice.FinalAmount,
+		invoiceDate,
+		invoice.VehicleModel,
+		invoice.LicensePlate,
+		invoice.StartTime,
+		invoice.EndTime,
+	)
 	if err != nil {
+		log.Printf("Error creating invoice: %v\n", err)
 		http.Error(w, "Error creating invoice", http.StatusInternalServerError)
-		log.Printf("Error inserting invoice: %v", err)
 		return
 	}
 
@@ -1673,6 +1934,7 @@ func CreateInvoice(w http.ResponseWriter, r *http.Request) {
 		"message": "Invoice created successfully",
 	})
 }
+
 func main() {
 	// Create a new router
 	r := mux.NewRouter()
@@ -1694,11 +1956,12 @@ func main() {
 	r.HandleFunc("/membership/upgrade/{id}", upgradeMembershipHandler).Methods("PUT")
 	// Handle available vehicles API
 	r.HandleFunc("/vehicles", VehiclesPageHandler)
+
 	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
 	r.HandleFunc("/reserve", createReservationHandler)
 	r.HandleFunc("/reservations", getReservationsHandler).Methods("GET")
 	r.HandleFunc("/vehicles/{vehicle_id}", getVehicleDetailsHandler).Methods("GET")
-	//update reservation details
+	//update reservation details after modifying
 	r.HandleFunc("/reservations/update/{id}", updateReservationHandler).Methods("PUT")
 	//cancel reservation details
 	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("DELETE")
@@ -1712,7 +1975,13 @@ func main() {
 	r.HandleFunc("/promotion/apply", applyPromoCode).Methods("POST")
 	// Get Promo Code Discount - Fetches the discount rate for a given promo code
 	r.HandleFunc("/promotion/discount/{promoCode}", getPromoCodeDiscount).Methods("GET")
+	//create invoice record into db
 	r.HandleFunc("/create/invoice/{reservationID}", CreateInvoice).Methods("POST")
+	//update reservation status after payment
+	r.HandleFunc("/reservation/update/{reservationID}", ReservationStatusHandler).Methods("PUT")
+	//update vehicle status after payment
+	r.HandleFunc("/vehicles/{vehicle_id}/status", VehicleStatusHandler).Methods("PUT")
+
 	// Apply CORS middleware
 	log.Println("Server started at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(
