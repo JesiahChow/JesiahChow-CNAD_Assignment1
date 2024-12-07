@@ -122,54 +122,59 @@ type Rental struct {
 }
 
 func main() {
-	// Create a new Gorilla Mux router
+	// Create a new router
 	r := mux.NewRouter()
 
-	// Serve static files (e.g., HTML pages)
+	// Static file serving
 	r.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "index.html")
 	})
 
-	// Define API endpoints with their respective handlers
-	r.HandleFunc("/register", registerHandler)     // User registration
-	r.HandleFunc("/login", loginHandler)           // User login
-	r.HandleFunc("/home", homeHandler)             // Home page
-	r.HandleFunc("/profile", profileHandler)       // User profile
-	r.HandleFunc("/membership", membershipHandler) // Membership details
-	r.HandleFunc("/verify", verifyHandler)         // Email verification
-	r.HandleFunc("/logout", logoutHandler)         // User logout
-
-	// Membership API for upgrading membership tiers
+	// Register handlers
+	r.HandleFunc("/register", registerHandler)
+	r.HandleFunc("/login", loginHandler)
+	r.HandleFunc("/home", homeHandler)
+	r.HandleFunc("/profile", profileHandler)
+	r.HandleFunc("/membership", membershipHandler)
+	r.HandleFunc("/verify", verifyHandler) // Email verification handler
+	r.HandleFunc("/logout", logoutHandler) // Logout handler
+	// Membership Upgrade API
 	r.HandleFunc("/membership/upgrade/{membershipTierID}", upgradeMembershipHandler).Methods("PUT")
+	// Handle available vehicles API
+	r.HandleFunc("/vehicles", VehiclesPageHandler)
+	//fetch the vehicles available for reservation
+	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
+	r.HandleFunc("/reserve", createReservationHandler)
+	r.HandleFunc("/reservations", getReservationsHandler).Methods("GET")
+	r.HandleFunc("/vehicles/{vehicle_id}", getVehicleDetailsHandler).Methods("GET")
+	//update reservation details after modifying
+	r.HandleFunc("/reservations/update/{id}", updateReservationHandler).Methods("PUT")
+	//cancel reservation details
+	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("DELETE")
+	//set vehicle status to 'reserved'
+	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST")
+	// Serves the billing page
+	r.HandleFunc("/billing", billingPageHandler)
+	// Get Membership Discount - Fetches the user's membership discount rate and name
+	r.HandleFunc("/membership/discount/{membershipTierID}", getMembershipDiscount).Methods("GET")
+	//post request for promo code
+	r.HandleFunc("/promotion/apply", applyPromoCode).Methods("POST")
+	// Get Promo Code Discount - Fetches the discount rate for a given promo code
+	r.HandleFunc("/promotion/discount/{promoCode}", getPromoCodeDiscount).Methods("GET")
+	//create invoice record into db
+	r.HandleFunc("/create/invoice/{reservationID}", CreateInvoice).Methods("POST")
+	//update reservation status after payment
+	r.HandleFunc("/reservation/update/{reservationID}", ReservationStatusHandler).Methods("PUT")
+	//update vehicle status after payment
+	r.HandleFunc("/vehicles/{vehicle_id}/status", VehicleStatusHandler).Methods("PUT")
+	//confirm page
+	r.HandleFunc("/confirmation", confirmationHandler).Methods("GET")
+	//get rental history
+	r.HandleFunc("/rental/history", viewRentalHandler).Methods("GET")
+	//render rental page
+	r.HandleFunc("/rental", RentalPageHandler)
 
-	// Vehicle-related APIs
-	r.HandleFunc("/vehicles", VehiclesPageHandler)                                        // Vehicle details page
-	r.HandleFunc("/vehicles/available", availableVehiclesHandler)                         // Available vehicles
-	r.HandleFunc("/vehicles/{vehicle_id}", getVehicleDetailsHandler).Methods("GET")       // Specific vehicle details
-	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST") // Reserve a vehicle
-	r.HandleFunc("/vehicles/{vehicle_id}/status", VehicleStatusHandler).Methods("PUT")    // Update vehicle status
-
-	// Reservation-related APIs
-	r.HandleFunc("/reserve", createReservationHandler)                                    // Create reservation
-	r.HandleFunc("/reservations", getReservationsHandler).Methods("GET")                  // Get reservations
-	r.HandleFunc("/reservations/update/{id}", updateReservationHandler).Methods("PUT")    // Update reservation
-	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("DELETE") // Cancel reservation
-
-	// Billing and Promotion APIs
-	r.HandleFunc("/billing", billingPageHandler)                                                  // Billing page
-	r.HandleFunc("/promotion/apply", applyPromoCode).Methods("POST")                              // Apply promo code
-	r.HandleFunc("/promotion/discount/{promoCode}", getPromoCodeDiscount).Methods("GET")          // Promo code discount
-	r.HandleFunc("/membership/discount/{membershipTierID}", getMembershipDiscount).Methods("GET") // Membership discount
-
-	// Invoice and Confirmation
-	r.HandleFunc("/create/invoice/{reservationID}", CreateInvoice).Methods("POST") // Create invoice
-	r.HandleFunc("/confirmation", confirmationHandler).Methods("GET")              // Confirmation page
-
-	// Rental history APIs
-	r.HandleFunc("/rental/history", viewRentalHandler).Methods("GET") // Rental history
-	r.HandleFunc("/rental", RentalPageHandler)                        // Rental page
-
-	// Start the server and apply CORS middleware
+	// Apply CORS middleware
 	log.Println("Server started at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(
 		handlers.AllowedOrigins([]string{"http://localhost:8080"}),         // Allow only frontend's origin

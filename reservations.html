@@ -242,7 +242,7 @@ function updateReservation() {
     };
 // Check if the reservation is within 1 hour of start time
 if (isWithinOneHour(formattedStartTime)) {
-        alert("You cannot cancel the reservation within 1 hour of the start time.");
+        alert("You cannot update the reservation within 1 hour of the start time.");
         return;
     }
     fetch(`/reservations/update/${currentReservationID}`, {
