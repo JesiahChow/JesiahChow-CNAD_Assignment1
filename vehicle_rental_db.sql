@@ -27,14 +27,7 @@ CREATE TABLE membership_tiers (
     price DECIMAL(10, 2) DEFAULT 0 -- price for upgrading
 );
 
-INSERT INTO user_service_db.users (username, email, password_hash, membership_tier_id, verification_token, is_verified) VALUES
-('john_doe', 'john.doe@example.com', '5e884898da28047151d0e56f8dc6292773603d0d1b54c5b6b8c7ff7587c4b5e5', 1, 'abc123token', TRUE),
-('jane_smith', 'jane.smith@example.com', '7c4f9be3e292f8d5e57e9f470a3d03d6da2872d75d5f6c73fcf9824a1f85f8bb', 2, 'def456token', TRUE),
-('alice_brown', 'alice.brown@example.com', 'b8b453019431c740f2b2ae0a49bc967e7cb37468a88bba12951e39d9a8c6e68a', 3, 'ghi789token', FALSE);
-INSERT INTO user_service_db.membership_tiers (name, benefits, discount_rate, price) VALUES
-('Basic', 'Access to basic vehicle rental benefits.', 5.00, 0),
-('Premium', 'Access to premium vehicle rental benefits, including priority booking.', 15.00, 50.00),
-('VIP', 'Access to VIP vehicle rental benefits, including exclusive vehicles and priority booking.', 25.00, 100.00);
+
 
 -- Create Vehicle Service Database
 CREATE DATABASE vehicle_service_db;
@@ -51,12 +44,6 @@ CREATE TABLE vehicles (
     hourly_rate DECIMAL(10, 2)
 );
 
-INSERT INTO vehicle_service_db.vehicles (license_plate, model, status, location, hourly_rate) VALUES
-('ABC123', 'Tesla Model 3', 'available', 'Orchard Road', 25.00),
-('DEF456', 'Nissan Leaf', 'reserved', 'Marina Bay Sands', 28.00),
-('GHI789', 'BMW i3', 'in_maintenance', 'Changi Airport', 30.00),
-('JKL012', 'Chevrolet Bolt EV', 'available', 'Sentosa', 32.00),
-('MNO345', 'Hyundai Kona Electric', 'available', 'Tampines Mall', 26.00);
 
 -- Create Reservation Service Database
 CREATE DATABASE reservation_service_db;
@@ -76,12 +63,6 @@ CREATE TABLE reservations (
     FOREIGN KEY (user_id) REFERENCES user_service_db.users(id),
     FOREIGN KEY (vehicle_id) REFERENCES vehicle_service_db.vehicles(id)
 );
-INSERT INTO reservation_service_db.reservations (user_id, vehicle_id, start_time, end_time, total_price, status) VALUES
-(1, 1, '2024-12-01 10:00:00', '2024-12-01 14:00:00', 60.00, 'active'),
-(2, 2, '2024-12-01 12:00:00', '2024-12-01 18:00:00', 72.00, 'completed'),
-(3, 3, '2024-12-02 09:00:00', '2024-12-02 15:00:00', 84.00, 'canceled'),
-(1, 4, '2024-12-02 08:00:00', '2024-12-02 16:00:00', 88.00, 'active'),
-(2, 5, '2024-12-03 10:00:00', '2024-12-03 14:00:00', 68.00, 'completed');
 
 -- Create Billing Service Database
 CREATE DATABASE billing_service_db;
@@ -114,7 +95,7 @@ USE promotion_service_db;
 -- Promotions Table
 CREATE TABLE promotions (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    code VARCHAR(20) UNIQUE,            -- Unique code for promotional discount (optional, e.g. PROMO10)
+    code VARCHAR(20) UNIQUE NOT NULL,            -- Unique code for promotional discount
     description VARCHAR(255),            -- Description of the promotion
     discount_rate DECIMAL(5, 2),        -- Discount percentage (e.g., 10 for 10%)
     start_date DATETIME,                -- When the promotion starts

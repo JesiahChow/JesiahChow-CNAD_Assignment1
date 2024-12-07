@@ -121,7 +121,7 @@
                 <p class="price">
                     Upgrade cost: ${{printf "%.2f" .Price}}
                 </p>
-                <form method="POST" action="/upgrade">
+                <form method="POST" action="/home">
                     <input type="hidden" name="membership_tier_id" value="{{.ID}}">
                     <button type="submit" onclick="upgradeMembership('{{.ID}}', '{{.Name}}')">Upgrade to {{.Name}}</button>
                 </form>
@@ -130,13 +130,13 @@
         {{end}}
 
         <!-- Back Button -->
-        <a href="/home" class="back-btn">Back to Dashboard</a>
+        <a href="/home" class="back-btn">Back to Home</a>
     </div>
     <script>
         // Upgrade Membership via API
         function upgradeMembership(membershipTierID, tierName) {
             // Call REST API to upgrade user membership
-            fetch("/membership/upgrade/${membershipTierID}", {
+            fetch(`/membership/upgrade/${membershipTierID}`, {
                 method: 'PUT', 
                 headers: {
                     'Content-Type': 'application/json',

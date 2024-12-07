@@ -110,11 +110,38 @@
         .modal-footer button {
             background-color: #28a745;
         }
+        .back-btn {
+            padding: 10px 15px;
+            background-color: #004494;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            display: block;
+            margin: 20px auto;
+            border-radius: 5px;
+        }
+        .back-btn:hover {
+            background-color: #003377;
+        }
+        footer {
+            text-align: center;
+            padding: 20px;
+            background-color: #004494; /* Matching footer color */
+            color: white;
+            font-size: 14px;
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+        }
+
+
     </style>
 </head>
 <body>
 
     <h1>Available Vehicles</h1>
+    <button class="back-btn" onclick="window.location.href='/home'">Back to Home</button>
     <p style="color: red; text-align: center;">Note: You will not be able to change or cancel your reservation 1 hour before your rental starts.</p>
     <table>
         <thead>
@@ -149,9 +176,12 @@
             </div>
         </div>
     </div>
-
+ <!-- Footer -->
+ <footer>
+    &copy; 2024 Better Call Volt. All rights reserved.
+</footer>
     <script>
-       let selectedVehicleID = null;  // Stores the vehicle ID for the reservation
+let selectedVehicleID = null;  // Stores the vehicle ID for the reservation
 let hourlyRate = 0;  // Stores the hourly rate for the selected vehicle
 
 // Fetch available vehicles and populate the table
