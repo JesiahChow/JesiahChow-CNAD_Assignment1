@@ -7,7 +7,7 @@ This application uses RESTful APIs and is backed by a relational database (MySQL
 <li>User Management
     <ul>
       <li>User registration, login and authentication(email verification)</li>
-      <li>Membership tiers (Basic, Premium, VIP) with different benfits i.e. discount rates</li>
+      <li>Membership tiers (Basic, Premium, VIP) with different benefits i.e. discount rates</li>
       <li>User profile management, including rental history</li>
     </ul>
   </li>
@@ -103,7 +103,7 @@ Each service is independent, allowing for easier scaling and maintenance, and th
 - go get github.com/jung-kurt/gofpdf/v2
   others are part of go standard library
 
-3. Use the MySQL scripts inside the repository and execute inside your MYSQL and connect them to the applications.
+3. Use the MySQL scripts inside the repository and execute inside your MYSQL to initialize the databases in your MySQL instance.
 
 4. Enable CORS on your browser before running the files
 
