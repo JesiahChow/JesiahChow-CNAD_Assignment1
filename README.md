@@ -46,7 +46,9 @@ The microservices architecture for this vehicle reservation system is designed w
 <li>Promotion service: Responsible for managing promotions. Manages the availability and creation of promotional codes, discount rates and the availability period.</li>
 Each service is independent, allowing for easier scaling and maintenance, and they communicate with each other using RESTful APIs to ensure loose coupling.
 <h1>Architecture Diagram</h1>
-![Architecture Diagram]cnad-architectural-diagram.png
+
+![cnad-architectural-diagram](https://github.com/user-attachments/assets/10a7683b-9ecf-4631-aac4-49be64660e56)
+
 Link to view the diagram: https://lucid.app/publicSegments/view/a636e470-beea-40dd-a797-45f99157fdc1/image.png
 <h2>Database Design</h2>
 
