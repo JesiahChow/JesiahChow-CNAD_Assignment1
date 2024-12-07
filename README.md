@@ -46,7 +46,7 @@ The microservices architecture for this vehicle reservation system is designed w
 <li>Promotion service: Responsible for managing promotions. Manages the availability and creation of promotional codes, discount rates and the availability period.</li>
 Each service is independent, allowing for easier scaling and maintenance, and they communicate with each other using RESTful APIs to ensure loose coupling.
 <h1>Architecture Diagram</h1>
-![Architecture Diagram](cnad-architecture-diagram.png)
+![Architecture Diagram]cnad-architectural-diagram.png
 <h2>Database Design</h2>
 
 1. User Service Database
