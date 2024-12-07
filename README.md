@@ -47,6 +47,7 @@ The microservices architecture for this vehicle reservation system is designed w
 Each service is independent, allowing for easier scaling and maintenance, and they communicate with each other using RESTful APIs to ensure loose coupling.
 <h1>Architecture Diagram</h1>
 ![Architecture Diagram]cnad-architectural-diagram.png
+Link to view the diagram: https://lucid.app/publicSegments/view/a636e470-beea-40dd-a797-45f99157fdc1/image.png
 <h2>Database Design</h2>
 
 1. User Service Database
