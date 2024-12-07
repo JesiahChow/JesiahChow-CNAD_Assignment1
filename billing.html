@@ -156,7 +156,7 @@
 
         <!-- Confirm Payment Button -->
         <div class="billing-section">
-            <p class="final-price"><strong>Final Price:</strong> ${{.FinalPrice}}</p>
+            <p class="final-price" style="color: red;"><strong>Final Price:</strong> ${{ printf "%.2f" .FinalPrice }}</p>
             <a href="#" class="confirm-btn" onclick="confirmPayment()">Confirm Payment</a>
         </div>
 
