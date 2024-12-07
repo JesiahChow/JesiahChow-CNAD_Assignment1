@@ -38,6 +38,8 @@ This application uses RESTful APIs and is backed by a relational database (MySQL
 <h1>Design Considerations for Microservices</h1>
 <li>User service: Responsible for managing user registration, authentication, and profile management. In addition managing the membership of the user. Communicates with database to store user information.</li>
 <li>Vehicle service: Responsible for managing vehicles availablilty, hourly rates, and status. Ensures vehicles are available for booking.</li>
+
 <h1>Architecture Diagram</h1>
+![cnad architectural diagram](https://github.com/user-attachments/assets/72e5e9ca-2184-4bf2-a048-b0020ab21e71)
 
 
