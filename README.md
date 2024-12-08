@@ -104,9 +104,9 @@ Link to view the diagram: https://lucid.app/publicSegments/view/a636e470-beea-40
 - go get github.com/gorilla/handlers
 - go get github.com/gorilla/sessions
 - go get github.com/jung-kurt/gofpdf/v2
-  others are part of go standard library
+- others are part of Go standard library
 
-3. Use the MySQL scripts inside the repository and execute inside your MYSQL to initialize the databases in your MySQL instance.
+3. Use the MySQL script inside the repository and execute inside your MYSQL to initialize the databases in your MySQL instance.
 
 4. Enable CORS on your browser before running the files
 
