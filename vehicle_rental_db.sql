@@ -25,6 +25,19 @@ CREATE TABLE users (
     FOREIGN KEY (membership_tier_id) REFERENCES membership_tiers(id)
 );
 
+-- Insert sample membership tiers
+INSERT INTO membership_tiers (name, benefits, discount_rate, price)
+VALUES
+('Basic', 'Basic membership benefits.', 0.00, 0.00),
+('Silver', '10% discount on all reservations.', 10.00, 49.99),
+('Gold', '20% discount and free upgrades when available.', 20.00, 99.99);
+
+-- Insert sample users
+INSERT INTO users (username, email, password_hash, membership_tier_id, verification_token, is_verified)
+VALUES
+('john_doe', 'john.doe@example.com', 'hashedpassword123', 1, 'token123', TRUE),
+('jane_smith', 'jane.smith@example.com', 'hashedpassword456', 2, NULL, TRUE),
+('emma_watson', 'emma.watson@example.com', 'hashedpassword789', 3, NULL, FALSE);
 
 
 
@@ -42,6 +55,13 @@ CREATE TABLE vehicles (
     location VARCHAR(100),
     hourly_rate DECIMAL(10, 2)
 );
+-- Insert sample vehicles
+INSERT INTO vehicles (license_plate, model, status, location, hourly_rate)
+VALUES
+('ABC123', 'Tesla Model 3', 'available', 'Orchard Road', 15.00),
+('XYZ789', 'Nissan Leaf', 'reserved', 'Changi Airport', 12.00),
+('LMN456', 'Chevy Bolt', 'in_maintenance', 'Chinese Garden', 10.00),
+('DEF321', 'Hyundai Ioniq 5', 'available', 'Singapore Discovery Center', 18.00);
 
 
 -- Create Reservation Service Database
@@ -62,6 +82,13 @@ CREATE TABLE reservations (
     FOREIGN KEY (user_id) REFERENCES user_service_db.users(id),
     FOREIGN KEY (vehicle_id) REFERENCES vehicle_service_db.vehicles(id)
 );
+
+-- Insert sample reservations
+INSERT INTO reservations (user_id, vehicle_id, start_time, end_time, total_price, status)
+VALUES
+(1, 1, '2024-12-08 10:00:00', '2024-12-08 12:00:00', 30.00, 'completed'),
+(2, 2, '2024-12-09 14:00:00', '2024-12-09 16:00:00', 24.00, 'active'),
+(3, 3, '2024-12-07 08:00:00', '2024-12-07 09:00:00', 10.00, 'cancelled');
 
 -- Create Billing Service Database
 CREATE DATABASE billing_service_db;
@@ -85,7 +112,12 @@ CREATE TABLE invoices (
     FOREIGN KEY (user_id) REFERENCES user_service_db.users(id),
     FOREIGN KEY (reservation_id) REFERENCES reservation_service_db.reservations(id)
 );
-
+-- Insert sample invoices
+INSERT INTO invoices (user_id, reservation_id, membership_discount, promo_discount, final_amount, vehicle_model, license_plate, start_time, end_time)
+VALUES
+(1, 1, 0.00, 10.00, 27.00, 'Tesla Model 3', 'ABC123', '2024-12-08 10:00:00', '2024-12-08 12:00:00'),
+(2, 2, 2.40, 0.00, 21.60, 'Nissan Leaf', 'XYZ789', '2024-12-09 14:00:00', '2024-12-09 16:00:00'),
+(3, 3, 0.00, 0.00, 10.00, 'Chevy Bolt', 'LMN456', '2024-12-07 08:00:00', '2024-12-07 09:00:00');
 
 
 CREATE DATABASE promotion_service_db;
