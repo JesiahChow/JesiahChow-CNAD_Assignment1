@@ -124,7 +124,8 @@
                                 onclick="openModifyModal('{{.ID}}', '{{.StartTime}}', '{{.EndTime}}', '{{.TotalPrice}}', '{{.VehicleInfo.HourlyRate}}')">
                             Modify
                         </button>
-                        <button class="action-btn" onclick="cancelReservation('{{.ID}}')">Cancel Reservation</button>
+                        <button class="action-btn" onclick="cancelReservation('{{.ID}}', '{{.StartTime}}')">Cancel Reservation</button>
+
                         <button class="action-btn" onclick="payReservation('{{.ID}}')">Pay</button>
                     </td>
                 </tr>
@@ -281,45 +282,36 @@ function isWithinOneHour(startTime) {
 
     return timeDifference <= 60 * 60 * 1000; // 1 hour = 60 minutes = 3600 seconds = 3600000 milliseconds
 }
-function cancelReservation(reservationID) {
-    // Make sure reservationID is valid
-    if (!reservationID) {
-        alert("Invalid reservation ID.");
-        return;
-    }
-// Check if the reservation is within 1 hour of start time
-if (isWithinOneHour(startTime)) {
+function cancelReservation(reservationID, startTime) {
+    // Validate if the reservation is within 1 hour of start time
+    if (isWithinOneHour(startTime)) {
         alert("You cannot cancel the reservation within 1 hour of the start time.");
         return;
     }
-    fetch(`/reservations/cancel/${reservationID}`, {
-        method: 'DELETE',
-    })
-    .then(response => {
-        if (!response.ok) {
-            return response.text().then(text => { throw new Error(text); });
-        }
-        return response.json();
-    })
-    .then(data => {
-        alert(data.message);  // Show success message
 
-        // Attempt to find the reservation row by ID
-        const row = document.getElementById(`reservation-${reservationID}`);
-        
-        if (row) {
-            // If the row is found, remove it from the table
-            row.remove();
-            console.log(`Reservation row with ID 'reservation-${reservationID}' removed.`);
-        } else {
-            console.error(`Reservation row with ID 'reservation-${reservationID}' not found.`);
-        }
+    // Proceed with cancellation
+    fetch(`/reservations/cancel/${reservationID}`, {
+        method: 'PUT',
     })
-    .catch(error => {
-        console.error('Error canceling reservation:', error);
-        alert('Failed to cancel reservation.');
-    });
+        .then(response => {
+            if (!response.ok) {
+                return response.text().then(text => { throw new Error(text); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            alert(data.message);
+            const row = document.getElementById(`reservation-${reservationID}`);
+            if (row) {
+                row.remove();
+            }
+        })
+        .catch(error => {
+            console.error('Error canceling reservation:', error);
+            alert('Failed to cancel reservation.');
+        });
 }
+
 
 
     </script>

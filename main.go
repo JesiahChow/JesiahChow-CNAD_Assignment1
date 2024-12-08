@@ -150,7 +150,7 @@ func main() {
 	//update reservation details after modifying
 	r.HandleFunc("/reservations/update/{id}", updateReservationHandler).Methods("PUT")
 	//cancel reservation details
-	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("DELETE")
+	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("PUT")
 	//set vehicle status to 'reserved'
 	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST")
 	// Serves the billing page

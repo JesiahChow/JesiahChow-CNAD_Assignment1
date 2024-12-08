@@ -474,8 +474,9 @@ func isCancellationAllowed(reservationID string) bool {
 
 // cancelReservationHandler handles the cancellation of a reservation
 func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
-	// Ensure the request is DELETE
-	if r.Method != http.MethodDelete {
+	log.Println("Request method:", r.Method) // Log request method
+	// Ensure the request is PUT
+	if r.Method != http.MethodPut {
 		http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 		return
 	}
@@ -489,14 +490,14 @@ func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Mark the reservation as canceled in the database
-	_, err := reservationdb.Exec("UPDATE reservations SET status = 'canceled' WHERE id = ?", reservationID)
+	// Mark the reservation as cancelled in the database
+	_, err := reservationdb.Exec("UPDATE reservations SET status = 'cancelled' WHERE id = ?", reservationID)
 	if err != nil {
 		http.Error(w, "Error canceling reservation", http.StatusInternalServerError)
 		return
 	}
 
-	// Get the vehicle ID associated with the canceled reservation
+	// Get the vehicle ID associated with the cancelled reservation
 	var vehicleID int
 	err = reservationdb.QueryRow("SELECT vehicle_id FROM reservations WHERE id = ?", reservationID).Scan(&vehicleID)
 	if err != nil {
@@ -514,6 +515,6 @@ func cancelReservationHandler(w http.ResponseWriter, r *http.Request) {
 	// Send success response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"message": "Reservation canceled!",
+		"message": "Reservation cancelled!",
 	})
 }

@@ -231,6 +231,8 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 func loginHandler(w http.ResponseWriter, r *http.Request) {
 	// If the method is GET, serve the login page with an empty error message
 	if r.Method == http.MethodGet {
+		// Get the success message from the query parameters
+		message := r.URL.Query().Get("message")
 		// Parse the login template
 		tmpl, err := template.ParseFiles("login.html")
 		if err != nil {
@@ -239,10 +241,11 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
-		// Serve the login page with an empty error message
+		// Serve the login page with an empty error message or success message when user updates profile
 		tmpl.Execute(w, struct {
 			ErrorMessage string
-		}{ErrorMessage: ""})
+			Message      string
+		}{ErrorMessage: "", Message: message})
 		return
 	}
 
@@ -387,7 +390,6 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 func profileHandler(w http.ResponseWriter, r *http.Request) {
 	// Retrieve session data
 	session, _ := store.Get(r, "user-session")
-	log.Printf("Session values after login: %v", session.Values)
 	loggedIn, _ := session.Values["loggedIn"].(bool)
 	username, _ := session.Values["username"].(string)
 
@@ -397,43 +399,45 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Data structure for template
+	type ProfileData struct {
+		Username       string
+		Email          string
+		MembershipTier string
+		ErrorMessage   string
+		Message        string
+	}
+
 	// Handle GET request: Fetch and display the current profile details
 	if r.Method == http.MethodGet {
-		// Fetch user details (email and membership tier) from the database
 		var email, membershipTier string
-		err := userdb.QueryRow("select email, (select name from membership_tiers where id = membership_tier_id) as membership_tier from users where username = ?", username).Scan(&email, &membershipTier)
+		err := userdb.QueryRow(
+			"SELECT email, (SELECT name FROM membership_tiers WHERE id = membership_tier_id) AS membership_tier FROM users WHERE username = ?",
+			username,
+		).Scan(&email, &membershipTier)
 		if err != nil {
-			// If there is an error fetching user details, log and return an internal server error
 			log.Printf("Error fetching user details: %v", err)
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
 
-		// Parse and render the profile page template
+		// Render the profile page
 		tmpl, err := template.ParseFiles("profile.html")
 		if err != nil {
-			// If there is an error parsing the template, log it and return an internal server error
 			log.Printf("Template parsing error: %v", err)
 			http.Error(w, "Internal server error.", http.StatusInternalServerError)
 			return
 		}
 
-		// Execute the template with current user data (username, email, membership tier)
-		tmpl.Execute(w, struct {
-			Username       string
-			Email          string
-			MembershipTier string
-			ErrorMessage   string
-		}{
+		tmpl.Execute(w, ProfileData{
 			Username:       username,
 			Email:          email,
 			MembershipTier: membershipTier,
-			ErrorMessage:   "", // Empty error message for GET request
+			ErrorMessage:   "",
+			Message:        "", // No message on initial page load
 		})
 	} else if r.Method == http.MethodPost {
 		// Handle POST request: Process profile updates
-
-		// Retrieve the new user data from the form
 		newUsername := r.FormValue("username")
 		newEmail := r.FormValue("email")
 		newPassword := r.FormValue("password")
@@ -441,55 +445,49 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 		// Check if the new username is already taken
 		if newUsername != username {
 			var existingId int
-			err := userdb.QueryRow("select id from users where username = ?", newUsername).Scan(&existingId)
+			err := userdb.QueryRow("SELECT id FROM users WHERE username = ?", newUsername).Scan(&existingId)
 			if err == nil {
-				// If the username is already taken, render the profile page with an error message
+				// Render the page with an error message
 				tmpl, _ := template.ParseFiles("profile.html")
-				tmpl.Execute(w, struct {
-					Username       string
-					Email          string
-					MembershipTier string
-					ErrorMessage   string
-				}{
+				tmpl.Execute(w, ProfileData{
 					Username:       username,
 					Email:          newEmail,
 					MembershipTier: "",
 					ErrorMessage:   "Username already taken.",
+					Message:        "",
 				})
 				return
 			}
 		}
 
-		// Prepare the SQL query to update the user's profile
+		// Prepare SQL query to update the user's profile
 		query := "UPDATE users SET username = ?, email = ?"
 		args := []interface{}{newUsername, newEmail}
 
-		// If a new password is provided, hash it and include it in the update query
+		// If a new password is provided, hash it and include it in the query
 		if newPassword != "" {
 			passwordHash := hashPassword(newPassword)
 			query += ", password_hash = ?"
 			args = append(args, passwordHash)
 		}
 
-		// Add the condition to update the profile of the current user
+		// Add condition to update the current user
 		query += " WHERE username = ?"
 		args = append(args, username)
 
-		// Execute the SQL query to update the user in the database
 		_, err := userdb.Exec(query, args...)
 		if err != nil {
-			// If there is an error updating the profile, log and return an internal server error
 			log.Printf("Error updating user profile: %v", err)
 			http.Error(w, "Failed to update profile. Please try again.", http.StatusInternalServerError)
 			return
 		}
 
-		// If profile updated successfully, update the session with the new username
-		session.Values["username"] = newUsername
+		// Clear the session and log the user out
+		session.Options.MaxAge = -1 // Invalidate session
 		session.Save(r, w)
 
-		// Redirect to the profile page to display updated information
-		http.Redirect(w, r, "/profile", http.StatusSeeOther)
+		// Redirect to login page with success message
+		http.Redirect(w, r, "/login?message=Profile updated successfully. Please log in again.", http.StatusSeeOther)
 	}
 }
 

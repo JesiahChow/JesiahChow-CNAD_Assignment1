@@ -159,12 +159,13 @@
     <!-- Profile Form Container -->
     <div class="container">
         <h2>Edit Your Profile</h2>
-
+     
         <!-- Error Message if there's any -->
         {{if .ErrorMessage}}
         <div class="error">{{.ErrorMessage}}</div>
         {{end}}
-
+   
+        
         <!-- Profile Update Form -->
         <form method="POST" action="/profile">
             <label for="username">Username</label>

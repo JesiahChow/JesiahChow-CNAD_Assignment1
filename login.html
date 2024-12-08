@@ -28,7 +28,11 @@
             color: #333;
             margin-bottom: 20px;
         }
-    
+        .success {
+            color: red;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
         .error {
             color: red;
             font-size: 14px;
@@ -106,6 +110,10 @@
 <body>
     <div class="container">
         <h1>Login</h1>
+        {{if .Message}}
+        <div class="success">{{.Message}}</div>
+        {{end}}
+
         {{if .ErrorMessage}}
         <div class="error">{{.ErrorMessage}}</div>
         {{end}}

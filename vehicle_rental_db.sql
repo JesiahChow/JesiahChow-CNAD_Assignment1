@@ -1,23 +1,9 @@
---New microservice
+--Electric car-sharing system database schema
 -- Create User Service Database
 CREATE DATABASE user_db;
 
 USE user_service_db;
 
--- Users Table
-CREATE TABLE users (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    membership_tier_id INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    verification_token VARCHAR(255),
-    is_verified BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (membership_tier_id) REFERENCES membership_tiers(id)
-);
-    ALTER TABLE users
-    MODIFY COLUMN membership_tier_id INT DEFAULT 1;
 -- Membership Tiers Table
 CREATE TABLE membership_tiers (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -26,6 +12,19 @@ CREATE TABLE membership_tiers (
     discount_rate DECIMAL(5, 2),
     price DECIMAL(10, 2) DEFAULT 0 -- price for upgrading
 );
+-- Users Table
+CREATE TABLE users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    membership_tier_id INT DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    verification_token VARCHAR(255),
+    is_verified BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (membership_tier_id) REFERENCES membership_tiers(id)
+);
+
 
 
 
@@ -58,7 +57,7 @@ CREATE TABLE reservations (
     start_time DATETIME,
     end_time DATETIME,
     total_price DECIMAL(10, 2),
-    status ENUM('active', 'completed', 'canceled'),
+    status ENUM('cctive', 'completed', 'cancelled'),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES user_service_db.users(id),
     FOREIGN KEY (vehicle_id) REFERENCES vehicle_service_db.vehicles(id)
@@ -80,7 +79,7 @@ CREATE TABLE invoices (
     status ENUM('paid') DEFAULT 'paid',
     invoice_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     vehicle_model VARCHAR(50),
-    license_plate VARCHAR(20) unique not null,
+    license_plate VARCHAR(20) not null,
     start_time DATETIME,
     end_time DATETIME,
     FOREIGN KEY (user_id) REFERENCES user_service_db.users(id),
