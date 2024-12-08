@@ -437,11 +437,45 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 			Message:        "", // No message on initial page load
 		})
 	} else if r.Method == http.MethodPost {
+		var membershipTier string
+		err := userdb.QueryRow(
+			"SELECT (SELECT name FROM membership_tiers WHERE id = membership_tier_id) AS membership_tier FROM users WHERE username = ?",
+			username,
+		).Scan(&membershipTier)
+		if err != nil {
+			log.Printf("Error fetching user details: %v", err)
+			http.Error(w, "Internal server error.", http.StatusInternalServerError)
+			return
+		}
 		// Handle POST request: Process profile updates
 		newUsername := r.FormValue("username")
 		newEmail := r.FormValue("email")
 		newPassword := r.FormValue("password")
 
+		// Validate the new email
+		if !isValidEmail(newEmail) {
+			tmpl, _ := template.ParseFiles("profile.html")
+			tmpl.Execute(w, ProfileData{
+				Username:       username,
+				Email:          newEmail,
+				MembershipTier: membershipTier, //keep the membership tier
+				ErrorMessage:   "Invalid email address.",
+				Message:        "",
+			})
+			return
+		}
+		// Validate the new password (only if provided)
+		if newPassword != "" && !isValidPassword(newPassword) {
+			tmpl, _ := template.ParseFiles("profile.html")
+			tmpl.Execute(w, ProfileData{
+				Username:       username,
+				Email:          newEmail,
+				MembershipTier: membershipTier,
+				ErrorMessage:   "New password must be at least 8 characters long.",
+				Message:        "",
+			})
+			return
+		}
 		// Check if the new username is already taken
 		if newUsername != username {
 			var existingId int
@@ -452,7 +486,7 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 				tmpl.Execute(w, ProfileData{
 					Username:       username,
 					Email:          newEmail,
-					MembershipTier: "",
+					MembershipTier: membershipTier, // Keep the original membership tier
 					ErrorMessage:   "Username already taken.",
 					Message:        "",
 				})
@@ -475,7 +509,7 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 		query += " WHERE username = ?"
 		args = append(args, username)
 
-		_, err := userdb.Exec(query, args...)
+		_, err = userdb.Exec(query, args...)
 		if err != nil {
 			log.Printf("Error updating user profile: %v", err)
 			http.Error(w, "Failed to update profile. Please try again.", http.StatusInternalServerError)
@@ -616,7 +650,7 @@ func membershipHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// availableVehiclesHandler handles the request to view rental history
+// viewRentalHandler handles the request to view rental history
 func viewRentalHandler(w http.ResponseWriter, r *http.Request) {
 	session, _ := store.Get(r, "user-session")
 	userID := session.Values["UserID"].(int)
@@ -626,7 +660,7 @@ func viewRentalHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query the database for vehicles with status 'available'
+	// Query the database for invoices related to the user
 	rows, err := billingdb.Query("SELECT reservation_id, membership_discount, promo_discount, final_amount, status, invoice_date, vehicle_model, license_plate, start_time, end_time FROM invoices WHERE user_id = ?", userID)
 	if err != nil {
 		http.Error(w, "Failed to retrieve available vehicles", http.StatusInternalServerError)
@@ -635,10 +669,10 @@ func viewRentalHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rows.Close()
 
-	// Create a slice to store vehicle data
+	// Create a slice to store rental data
 	var rentals []Rental
 
-	// Loop through the rows and scan each vehicle's data into the struct
+	// Loop through the rows and scan each rental data into the struct
 	for rows.Next() {
 		var rental Rental
 		err := rows.Scan(&rental.ReservationID, &rental.MembershipDiscount, &rental.PromoDiscount, &rental.FinalAmount, &rental.Status, &rental.InvoiceDate, &rental.VehicleModel, &rental.LicensePlate, &rental.StartTime, &rental.EndTime)
@@ -647,11 +681,11 @@ func viewRentalHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Row scan error: %v\n", err)
 			return
 		}
-		// Append each vehicle to the vehicles slice
+		// Append each rental to the rentals slice
 		rentals = append(rentals, rental)
 	}
 
-	// Respond with the available vehicles in JSON format
+	// Respond with the rentals in JSON format
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(rentals)
 	if err != nil {
@@ -660,7 +694,7 @@ func viewRentalHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// RentalPageHandler serves the Available Vehicles page
+// RentalPageHandler serves the rental page
 func RentalPageHandler(w http.ResponseWriter, r *http.Request) {
 	// Retrieve session and check if the user is logged in
 	session, _ := store.Get(r, "user-session")
@@ -673,7 +707,7 @@ func RentalPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Serve the HTML page for available vehicles
+	// Serve the HTML page for rental
 	tmpl, err := template.ParseFiles("rental.html")
 	if err != nil {
 		// If there is an error loading the template, send an internal server error

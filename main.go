@@ -107,6 +107,8 @@ type Reservation struct {
 	Status      string      `json:"status"`
 	VehicleInfo VehicleInfo `json:"vehicle_info"`
 }
+
+// rental struct
 type Rental struct {
 	ReservationID      int     `json:"reservation_id"`
 	MembershipDiscount float64 `json:"membership_discount"`
@@ -125,7 +127,7 @@ func main() {
 	// Create a new router
 	r := mux.NewRouter()
 
-	// Static file serving
+	// Static file serving (always /index when going to the landing page)
 	r.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "index.html")
 	})
@@ -144,8 +146,11 @@ func main() {
 	r.HandleFunc("/vehicles", VehiclesPageHandler)
 	//fetch the vehicles available for reservation
 	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
+	//create a reservation
 	r.HandleFunc("/reserve", createReservationHandler)
+	// retrieve reservations
 	r.HandleFunc("/reservations", getReservationsHandler).Methods("GET")
+	//retrieve vehicle details
 	r.HandleFunc("/vehicles/{vehicle_id}", getVehicleDetailsHandler).Methods("GET")
 	//update reservation details after modifying
 	r.HandleFunc("/reservations/update/{id}", updateReservationHandler).Methods("PUT")
@@ -157,7 +162,7 @@ func main() {
 	r.HandleFunc("/billing", billingPageHandler)
 	// Get Membership Discount - Fetches the user's membership discount rate and name
 	r.HandleFunc("/membership/discount/{membershipTierID}", getMembershipDiscount).Methods("GET")
-	//post request for promo code
+	//post request for promo code validation and calculate final price based on user input
 	r.HandleFunc("/promotion/apply", applyPromoCode).Methods("POST")
 	// Get Promo Code Discount - Fetches the discount rate for a given promo code
 	r.HandleFunc("/promotion/discount/{promoCode}", getPromoCodeDiscount).Methods("GET")
@@ -167,7 +172,7 @@ func main() {
 	r.HandleFunc("/reservation/update/{reservationID}", ReservationStatusHandler).Methods("PUT")
 	//update vehicle status after payment
 	r.HandleFunc("/vehicles/{vehicle_id}/status", VehicleStatusHandler).Methods("PUT")
-	//confirm page
+	//confirm page after payment
 	r.HandleFunc("/confirmation", confirmationHandler).Methods("GET")
 	//get rental history
 	r.HandleFunc("/rental/history", viewRentalHandler).Methods("GET")
