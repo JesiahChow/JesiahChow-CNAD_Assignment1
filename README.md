@@ -58,7 +58,7 @@ Link to view the diagram: https://lucid.app/publicSegments/view/a636e470-beea-40
 - The User Service handles all user-related data, such as user profiles, authentication and membership details. Combining users and membership tiers in this database ensures logical grouping of closely related entities.
 - All operations related to user accounts, such as verifying emails, retrieving membership benefits like discounts, and updating user details, can be performed within the same service without cross-service calls.
 - Keeping users and membership tiers together, helps avoid unneccesary API calls to other services for retrieving membership-related information.
-- User operations scale independently from from other services, so keeping a separate database allows operations to scale as needed without impacting other services.
+- User operations scale independently from other services, so keeping a separate database allows operations to scale as needed without impacting other services.
 
 2. Vehicle Service Database
    Tables: vehicles
