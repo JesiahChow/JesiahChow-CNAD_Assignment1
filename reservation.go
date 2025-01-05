@@ -134,7 +134,7 @@ func createReservationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Call the Vehicle Service to update the vehicle's status to 'reserved'
-	vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/reserve/%d", reservation.VehicleID)
+	vehicleServiceURL := fmt.Sprintf("http://localhost:8082/vehicles/reserve/%d", reservation.VehicleID)
 	resp, err := http.Post(vehicleServiceURL, "application/json", nil)
 	if err != nil {
 		log.Printf("Error calling Vehicle Service: %v\n", err)
@@ -316,7 +316,7 @@ func getReservationsHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Fetch vehicle details from Vehicle Service
-		vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/%d", reservation.VehicleID)
+		vehicleServiceURL := fmt.Sprintf("http://localhost:8081/vehicles/%d", reservation.VehicleID)
 		resp, err := http.Get(vehicleServiceURL)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			log.Printf("Error fetching vehicle details for vehicle_id %d: %v\n", reservation.VehicleID, err)

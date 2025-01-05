@@ -123,67 +123,133 @@ type Rental struct {
 	EndTime            string  `json:"end_time"`
 }
 
+// Start each service on a separate port
 func main() {
-	// Create a new router
-	r := mux.NewRouter()
+	go startUserService()
+	go startVehicleService()
+	go startReservationService()
+	go startBillingService()
+	go startPromotionService()
 
-	// Static file serving (always /index when going to the landing page)
+	select {} // Block main thread indefinitely
+}
+
+// User Service
+func startUserService() {
+	r := mux.NewRouter()
 	r.HandleFunc("/index", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "index.html")
 	})
-
-	// Register handlers
 	r.HandleFunc("/register", registerHandler)
 	r.HandleFunc("/login", loginHandler)
-	r.HandleFunc("/home", homeHandler)
+	r.HandleFunc("/logout", logoutHandler)
 	r.HandleFunc("/profile", profileHandler)
+	r.HandleFunc("/home", homeHandler)
 	r.HandleFunc("/membership", membershipHandler)
-	r.HandleFunc("/verify", verifyHandler) // Email verification handler
-	r.HandleFunc("/logout", logoutHandler) // Logout handler
-	// Membership Upgrade API
-	r.HandleFunc("/membership/upgrade/{membershipTierID}", upgradeMembershipHandler).Methods("PUT")
-	// Handle available vehicles API
-	r.HandleFunc("/vehicles", VehiclesPageHandler)
-	//fetch the vehicles available for reservation
-	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
-	//create a reservation
-	r.HandleFunc("/reserve", createReservationHandler)
-	// retrieve reservations
-	r.HandleFunc("/reservations", getReservationsHandler).Methods("GET")
-	//retrieve vehicle details
-	r.HandleFunc("/vehicles/{vehicle_id}", getVehicleDetailsHandler).Methods("GET")
-	//update reservation details after modifying
-	r.HandleFunc("/reservations/update/{id}", updateReservationHandler).Methods("PUT")
-	//cancel reservation details
-	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("PUT")
-	//set vehicle status to 'reserved'
-	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST")
-	// Serves the billing page
-	r.HandleFunc("/billing", billingPageHandler)
-	// Get Membership Discount - Fetches the user's membership discount rate and name
-	r.HandleFunc("/membership/discount/{membershipTierID}", getMembershipDiscount).Methods("GET")
-	//post request for promo code validation and calculate final price based on user input
-	r.HandleFunc("/promotion/apply", applyPromoCode).Methods("POST")
-	// Get Promo Code Discount - Fetches the discount rate for a given promo code
-	r.HandleFunc("/promotion/discount/{promoCode}", getPromoCodeDiscount).Methods("GET")
-	//create invoice record into db
-	r.HandleFunc("/create/invoice/{reservationID}", CreateInvoice).Methods("POST")
-	//update reservation status after payment
-	r.HandleFunc("/reservation/update/{reservationID}", ReservationStatusHandler).Methods("PUT")
-	//update vehicle status after payment
-	r.HandleFunc("/vehicles/{vehicle_id}/status", VehicleStatusHandler).Methods("PUT")
-	//confirm page after payment
-	r.HandleFunc("/confirmation", confirmationHandler).Methods("GET")
-	//get rental history
 	r.HandleFunc("/rental/history", viewRentalHandler).Methods("GET")
 	//render rental page
 	r.HandleFunc("/rental", RentalPageHandler)
+	r.HandleFunc("/membership/upgrade/{membershipTierID}", upgradeMembershipHandler).Methods("PUT")
+	r.HandleFunc("/membership/discount/{membershipTierID}", getMembershipDiscount).Methods("GET")
+	r.HandleFunc("/verify", verifyHandler) // Email verification
 
-	// Apply CORS middleware
-	log.Println("Server started at http://localhost:8080")
+	fmt.Println("User Service running at http://localhost:8080")
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(
-		handlers.AllowedOrigins([]string{"http://localhost:8080"}),         // Allow only frontend's origin
-		handlers.AllowedMethods([]string{"POST", "GET", "PUT", "DELETE"}),  // Allowed HTTP methods
+		handlers.AllowedOrigins([]string{
+			"http://localhost:8081", // Vehicle Service
+			"http://localhost:8080", // User Service
+			"http://localhost:8082", // Reservation Service
+			"http://localhost:8083", // Billing Service
+			"http://localhost:8084", // Promotion Service
+		}), // Frontend origin
+		handlers.AllowedMethods([]string{"POST", "GET", "PUT", "DELETE"}),  // Allowed methods
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}), // Allowed headers
+	)(r)))
+}
+
+// Vehicle Service
+func startVehicleService() {
+	r := mux.NewRouter()
+	r.HandleFunc("/vehicles", VehiclesPageHandler)
+	r.HandleFunc("/vehicles/available", availableVehiclesHandler)
+	r.HandleFunc("/vehicles/{vehicle_id}", getVehicleDetailsHandler).Methods("GET")
+	r.HandleFunc("/vehicles/{vehicle_id}/status", VehicleStatusHandler).Methods("PUT")
+
+	fmt.Println("Vehicle Service running at http://localhost:8081")
+	log.Fatal(http.ListenAndServe(":8081", handlers.CORS(
+		handlers.AllowedOrigins([]string{
+			"http://localhost:8081", // Vehicle Service
+			"http://localhost:8080", // User Service
+			"http://localhost:8082", // Reservation Service
+			"http://localhost:8083", // Billing Service
+			"http://localhost:8084", // Promotion Service
+		}), // Frontend origin
+		handlers.AllowedMethods([]string{"POST", "GET", "PUT", "DELETE"}),  // Allowed methods
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}), // Allowed headers
+	)(r)))
+}
+
+// Reservation Service
+func startReservationService() {
+	r := mux.NewRouter()
+	r.HandleFunc("/reserve", createReservationHandler)
+	r.HandleFunc("/vehicles/reserve/{vehicle_id}", reserveVehicleHandler).Methods("POST")
+	r.HandleFunc("/reservations", getReservationsHandler).Methods("GET")
+	r.HandleFunc("/reservations/update/{id}", updateReservationHandler).Methods("PUT")
+	r.HandleFunc("/reservations/cancel/{id}", cancelReservationHandler).Methods("PUT")
+
+	fmt.Println("Reservation Service running at http://localhost:8082")
+	log.Fatal(http.ListenAndServe(":8082", handlers.CORS(
+		handlers.AllowedOrigins([]string{
+			"http://localhost:8081", // Vehicle Service
+			"http://localhost:8080", // User Service
+			"http://localhost:8082", // Reservation Service
+			"http://localhost:8083", // Billing Service
+			"http://localhost:8084", // Promotion Service
+		}), // Frontend origin
+		handlers.AllowedMethods([]string{"POST", "GET", "PUT", "DELETE"}),  // Allowed methods
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}), // Allowed headers
+	)(r)))
+}
+
+// Billing Service
+func startBillingService() {
+	r := mux.NewRouter()
+	r.HandleFunc("/billing", billingPageHandler)
+	r.HandleFunc("/create/invoice/{reservationID}", CreateInvoice).Methods("POST")
+	r.HandleFunc("/reservation/update/{reservationID}", ReservationStatusHandler).Methods("PUT")
+	r.HandleFunc("/confirmation", confirmationHandler).Methods("GET")
+
+	fmt.Println("Billing Service running at http://localhost:8083")
+	log.Fatal(http.ListenAndServe(":8083", handlers.CORS(
+		handlers.AllowedOrigins([]string{
+			"http://localhost:8081", // Vehicle Service
+			"http://localhost:8080", // User Service
+			"http://localhost:8082", // Reservation Service
+			"http://localhost:8083", // Billing Service
+			"http://localhost:8084", // Promotion Service
+		}), // Frontend origin
+		handlers.AllowedMethods([]string{"POST", "GET", "PUT", "DELETE"}),  // Allowed methods
+		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}), // Allowed headers
+	)(r)))
+}
+
+// Promotion Service
+func startPromotionService() {
+	r := mux.NewRouter()
+	r.HandleFunc("/promotion/apply", applyPromoCode).Methods("POST")
+	r.HandleFunc("/promotion/discount/{promoCode}", getPromoCodeDiscount).Methods("GET")
+
+	fmt.Println("Promotion Service running at http://localhost:8084")
+	log.Fatal(http.ListenAndServe(":8084", handlers.CORS(
+		handlers.AllowedOrigins([]string{
+			"http://localhost:8081", // Vehicle Service
+			"http://localhost:8080", // User Service
+			"http://localhost:8082", // Reservation Service
+			"http://localhost:8083", // Billing Service
+			"http://localhost:8084", // Promotion Service
+		}), // Frontend origin
+		handlers.AllowedMethods([]string{"POST", "GET", "PUT", "DELETE"}),  // Allowed methods
 		handlers.AllowedHeaders([]string{"Content-Type", "Authorization"}), // Allowed headers
 	)(r)))
 }

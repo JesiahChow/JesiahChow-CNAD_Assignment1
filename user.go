@@ -45,8 +45,8 @@ func sendVerificationEmail(email, token string) {
 	message := fmt.Sprintf("Subject: Email Verification\n\nClick on the following link to verify your email: %s", link)
 
 	// Set up the email sender and SMTP server
-	senderEmail := "bettercallvolt@gmail.com" // sender email
-	senderPassword := "qxfcqajpzeutxvxm"      //password retrieved from app password
+	senderEmail := "frostreact@gmail.com" // sender email
+	senderPassword := "pkgrjdjeoctevvmv"  //password retrieved from app password
 	smtpServer := "smtp.gmail.com"
 	smtpPort := "587" // Gmail's SMTP port
 
@@ -280,7 +280,10 @@ func loginHandler(w http.ResponseWriter, r *http.Request) {
 			// Pass error message to the template (invalid email or password)
 			tmpl.Execute(w, struct {
 				ErrorMessage string
-			}{ErrorMessage: "Invalid email or password"})
+				Message      string
+			}{ErrorMessage: "Invalid email or password", Message: ""})
+			log.Println("Handling login form submission")
+
 			return
 		}
 

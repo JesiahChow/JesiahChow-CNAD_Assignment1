@@ -268,7 +268,7 @@ function submitReservation() {
         end_time: endTime,
         total_price: totalPrice
     };
-    fetch('http://localhost:8080/reserve',{
+    fetch('http://localhost:8082/reserve',{
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -286,7 +286,7 @@ function submitReservation() {
         console.error("Error during reservation:", err);
         alert("Error during reservation: " + err.message);
     });
-    fetch('http://localhost:8080/vehicles/reserve/' + selectedVehicleID, {
+    fetch('http://localhost:8082/vehicles/reserve/' + selectedVehicleID, {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json',

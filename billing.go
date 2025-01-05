@@ -37,7 +37,7 @@ func getReservationDetails(reservationID int) (Reservation, error) {
 		}
 
 		// Fetch vehicle details from Vehicle Service (assuming vehicle info is available via an API)
-		vehicleServiceURL := fmt.Sprintf("http://localhost:8080/vehicles/%d", reservations.VehicleID)
+		vehicleServiceURL := fmt.Sprintf("http://localhost:8081/vehicles/%d", reservations.VehicleID)
 		resp, err := http.Get(vehicleServiceURL)
 		if err != nil || resp.StatusCode != http.StatusOK {
 			return Reservation{}, fmt.Errorf("Error fetching vehicle details for vehicle_id %d: %v", reservations.VehicleID, err)
@@ -221,7 +221,7 @@ func getPromoCodeDiscount(w http.ResponseWriter, r *http.Request) {
 // Function to get promo code discount rate from the promotion service
 func getPromoDiscount(promoCode string) (float64, error) {
 	// Construct the URL for the promotion service API
-	url := fmt.Sprintf("http://localhost:8080/promotion/discount/%s", promoCode)
+	url := fmt.Sprintf("http://localhost:8084/promotion/discount/%s", promoCode)
 
 	// Send HTTP GET request to fetch the promo discount
 	resp, err := http.Get(url)
@@ -538,7 +538,7 @@ func updateVehicleStatus(vehicleID int) error {
 	reqBodyJSON, _ := json.Marshal(reqBody)
 
 	// API endpoint of the Vehicle Service
-	url := fmt.Sprintf("http://localhost:8080/vehicles/%d/status", vehicleID)
+	url := fmt.Sprintf("http://localhost:8081/vehicles/%d/status", vehicleID)
 	log.Printf("Sending request to: %s", url) // Log the URL
 
 	// Create a new PUT request
@@ -641,7 +641,7 @@ func createInvoiceStatus(reservationID int, userID int, membershipDiscount, prom
 	}
 
 	// API endpoint for creating an invoice
-	url := fmt.Sprintf("http://localhost:8080/create/invoice/%d", reservationID)
+	url := fmt.Sprintf("http://localhost:8083/create/invoice/%d", reservationID)
 	log.Printf("Sending invoice creation request to: %s", url)
 
 	// Create a new POST request
@@ -710,8 +710,8 @@ func generateInvoicePDF(invoice Invoice) (string, error) {
 func sendEmailWithPDF(userEmail, subject, body, pdfPath string) error {
 	// SMTP server configuration
 	// Set up the email sender and SMTP server
-	senderEmail := "bettercallvolt@gmail.com" // sender email
-	senderPassword := "qxfcqajpzeutxvxm"      //password retrieved from app password
+	senderEmail := "frostreact@gmail.com" // sender email
+	senderPassword := "pkgrjdjeoctevvmv"  //password retrieved from app password
 	smtpServer := "smtp.gmail.com"
 	smtpPort := "587" // Gmail's SMTP port
 

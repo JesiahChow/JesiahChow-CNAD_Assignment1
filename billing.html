@@ -182,7 +182,7 @@ function applyPromoCode() {
     };
 
     if (promoCode) {
-        fetch("http://localhost:8080/promotion/apply", {
+        fetch("http://localhost:8084/promotion/apply", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -247,7 +247,7 @@ function confirmPayment() {
     const formattedEndTime = String(endTime).replace('T', ' ');
 
     // First, update the reservation status
-    fetch(`http://localhost:8080/reservation/update/${reservationID}`, {
+    fetch(`http://localhost:8083/reservation/update/${reservationID}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ reservationID })
@@ -275,7 +275,7 @@ function confirmPayment() {
             end_time: formattedEndTime,
         };
 
-        return fetch(`http://localhost:8080/create/invoice/${reservationID}`, {
+        return fetch(`http://localhost:8083/create/invoice/${reservationID}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(invoice)
